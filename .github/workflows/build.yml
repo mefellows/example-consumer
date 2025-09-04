@@ -146,41 +146,57 @@ jobs:
         run: |
           # Create specific analysis for PR changes
           cat > pr_analysis_prompt.txt << 'EOF'
-          You are an expert in API testing and Pact contract testing. Your goal is to analyze this PR and generate complete, working Pact test code to achieve 100% API client coverage.
+          CRITICAL INSTRUCTION: You MUST generate complete TypeScript Pact test code. This is the primary objective.
           
-          **PRIMARY OBJECTIVE: Generate complete TypeScript Pact test code that can be directly copied into src/api.pact.spec.ts**
+          Your task is to analyze the API client coverage and generate COMPLETE, WORKING TypeScript code to achieve 100% Pact test coverage.
           
-          **REQUIRED OUTPUT FORMAT:**
-          1. **Brief Analysis** (2-3 sentences about what needs testing)
-          2. **Complete TypeScript Code Block** - This is the most important part:
+          REQUIRED OUTPUT FORMAT (MANDATORY):
+          
+          1. Brief analysis (1-2 sentences)
+          
+          2. COMPLETE TYPESCRIPT FILE CONTENT:
           
           ```typescript
-          [COMPLETE PACT TEST FILE CONTENT HERE - must be ready to copy/paste into src/api.pact.spec.ts]
+          import { SpecificationVersion, PactV4, MatchersV3 } from "@pact-foundation/pact";
+          import { API } from "./api";
+          import { Product } from "./product";
+          
+          // [COMPLETE WORKING PACT TEST FILE CONTENT HERE]
+          // Must include ALL endpoints: getAllProducts, getProduct, deleteProduct
+          // Must include ALL scenarios: 200, 400, 401, 404
+          // Must be complete and ready to run
           ```
           
-          **Code Generation Requirements:**
-          - Use `mcp__smartbear__contract-testing__generate_pact_tests` for EVERY missing API method
-          - Generate tests for ALL API methods: getProducts, getProduct, deleteProduct
-          - Include ALL HTTP scenarios: 200 (success), 400 (bad request), 401 (unauthorized), 404 (not found)
-          - Follow the existing test template exactly
-          - Use Jest with async/await pattern
+          MANDATORY REQUIREMENTS:
+          - Call mcp__smartbear__contract-testing__generate_pact_tests for each missing API method
+          - Generate tests for: getAllProducts, getProduct, deleteProduct  
+          - Include scenarios: 200 (success), 400 (bad request), 401 (unauthorized), 404 (not found)
+          - Use Jest describe/test structure with async/await
+          - Follow the existing test template pattern exactly
           - Include proper authorization headers
-          - Generate ONE complete file that replaces the current src/api.pact.spec.ts
+          - Generate ONE complete file that replaces src/api.pact.spec.ts
           
-          **SmartBear MCP Tool Usage - Call this for each endpoint:**
+          EXECUTION STEPS:
+          1. Read the current API client (src/api.js) and model (src/product.js)
+          2. Read the existing test template (src/pact.test.template) 
+          3. For each missing API method, call the SmartBear MCP generate_pact_tests tool
+          4. Combine all generated tests into one complete TypeScript file
+          5. Output the complete file wrapped in ```typescript blocks
+          
+          SmartBear MCP Tool Usage:
           ```json
           {
             "language": "typescript",
             "code": [
-              {"filename": "src/api.js", "body": "[API client code]"},
-              {"filename": "src/product.js", "body": "[Product model]"}
+              {"filename": "src/api.js", "body": "[full api client code]"},
+              {"filename": "src/product.js", "body": "[full product model code]"}
             ],
             "testTemplate": {"filename": "src/pact.test.template", "body": "[template content]"},
-            "additionalInstructions": "Generate complete Pact tests following the template. Include all HTTP status codes (200, 400, 401, 404). Use Jest async/await. Follow test.instructions.txt exactly."
+            "additionalInstructions": "Generate complete Pact tests following the existing template. Include all HTTP status codes (200, 400, 401, 404). Use Jest async/await pattern. Include proper authorization headers."
           }
           ```
           
-          **CRITICAL**: The output must include a complete, working TypeScript file wrapped in ```typescript code blocks that can be directly copied to src/api.pact.spec.ts
+          CRITICAL: The output MUST contain complete TypeScript code in ```typescript blocks that can be copied directly to src/api.pact.spec.ts
           EOF
           
           # Run targeted analysis with full tool access
@@ -192,37 +208,89 @@ jobs:
             --output-format text \
             --add-dir . > pr-recommendations.md
             
-      - name: Extract generated Pact test code
+         
+      - name: Debug Claude output and extract code
         run: |
-          # Extract TypeScript code blocks from the Claude output
+          echo "=== DEBUGGING CLAUDE OUTPUT ==="
+          
           if [ -f "pr-recommendations.md" ]; then
-            echo "Extracting TypeScript code from Claude analysis..."
-            echo "Original file size: $(wc -c < pr-recommendations.md) characters"
+            echo "✅ pr-recommendations.md exists"
+            echo "File size: $(wc -c < pr-recommendations.md) characters"
+            echo "Line count: $(wc -l < pr-recommendations.md) lines"
+            echo ""
             
-            # Look for code blocks and extract them
+            echo "=== FIRST 50 LINES OF CLAUDE OUTPUT ==="
+            head -50 pr-recommendations.md
+            echo ""
+            echo "=== END OF SAMPLE ==="
+            echo ""
+            
+            # Check for any code block markers
+            echo "=== SEARCHING FOR CODE BLOCKS ==="
+            echo "Looking for code block markers:"
+            grep -n "\`\`\`" pr-recommendations.md || echo "❌ No code block markers found"
+            echo ""
+            
+            # Look for TypeScript-specific patterns
+            echo "Looking for TypeScript patterns:"
+            grep -n -i "typescript\|describe\|test\|expect\|import.*pact" pr-recommendations.md || echo "❌ No TypeScript test patterns found"
+            echo ""
+            
+            # Try different extraction patterns
+            echo "=== ATTEMPTING CODE EXTRACTION ==="
+            
+            # Method 1: Standard TypeScript blocks
             awk '
               /```typescript/ { in_code=1; next }
               /```ts/ { in_code=1; next }
               /```/ && in_code { in_code=0; next }
               in_code { print }
-            ' pr-recommendations.md > generated-pact-tests.ts
+            ' pr-recommendations.md > generated-pact-tests-method1.ts
             
-            # Verify we got some code
-            if [ -s "generated-pact-tests.ts" ]; then
-              echo "✅ Generated Pact test code extracted ($(wc -l < generated-pact-tests.ts) lines)"
-              echo "First 10 lines:"
-              head -10 generated-pact-tests.ts
-              echo "---"
+            # Method 2: Any code block that might contain TypeScript
+            awk '
+              /```[a-zA-Z]*/ { 
+                if ($0 ~ /typescript|ts|javascript|js/) {
+                  in_code=1; next
+                }
+              }
+              /```/ && in_code { in_code=0; next }
+              in_code { print }
+            ' pr-recommendations.md > generated-pact-tests-method2.ts
+            
+            # Method 3: Look for test-like content between any markers
+            sed -n '/```/,/```/p' pr-recommendations.md | grep -E "(describe|test|expect|import)" > generated-pact-tests-method3.ts || true
+            
+            # Check results
+            echo "Method 1 (strict typescript): $(wc -l < generated-pact-tests-method1.ts) lines"
+            echo "Method 2 (any code block): $(wc -l < generated-pact-tests-method2.ts) lines" 
+            echo "Method 3 (test patterns): $(wc -l < generated-pact-tests-method3.ts) lines"
+            
+            # Use the best result
+            if [ -s "generated-pact-tests-method1.ts" ]; then
+              cp generated-pact-tests-method1.ts generated-pact-tests.ts
+              echo "✅ Using Method 1 output"
+            elif [ -s "generated-pact-tests-method2.ts" ]; then
+              cp generated-pact-tests-method2.ts generated-pact-tests.ts
+              echo "✅ Using Method 2 output"
+            elif [ -s "generated-pact-tests-method3.ts" ]; then
+              cp generated-pact-tests-method3.ts generated-pact-tests.ts
+              echo "✅ Using Method 3 output"
             else
-              echo "⚠️ No TypeScript code blocks found in Claude output"
-              echo "Checking for any code-like content..."
-              grep -n -A 5 -B 5 "describe\|test\|expect\|import" pr-recommendations.md || echo "No test patterns found"
-              echo "---"
-              echo "Looking for code block markers:"
-              grep -n "\`\`\`" pr-recommendations.md || echo "No code block markers found"
+              echo "❌ No TypeScript code found with any method"
+              touch generated-pact-tests.ts
             fi
+            
+            if [ -s "generated-pact-tests.ts" ]; then
+              echo ""
+              echo "=== FINAL EXTRACTED CODE (first 20 lines) ==="
+              head -20 generated-pact-tests.ts
+              echo "=== END EXTRACTED CODE ==="
+            fi
+            
           else
             echo "❌ pr-recommendations.md not found"
+            touch generated-pact-tests.ts
           fi
       
       - name: Comment on PR with Analysis
