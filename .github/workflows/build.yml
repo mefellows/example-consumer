@@ -2,6 +2,8 @@ name: Build
 
 on:
   push:
+  pull_request:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 env:
@@ -17,7 +19,7 @@ jobs:
     strategy:
       matrix:
         pact_provider: [
-            "pactflow-example-bi-directional-provider-dredd",
+            # "pactflow-example-bi-directional-provider-dredd",
             # "pactflow-example-bi-directional-provider-restassured",
             # "pactflow-example-bi-directional-provider-postman",
             'pactflow-example-provider'
@@ -37,6 +39,13 @@ jobs:
         run: GIT_BRANCH=${GIT_REF:11} make publish_pacts
         env:
           PACT_PROVIDER: ${{ matrix.pact_provider }}
+      
+      - name: Upload Pact files
+        uses: actions/upload-artifact@v4
+        with:
+          name: pact-files-${{ matrix.pact_provider }}
+          path: pacts/
+          retention-days: 1
 
   # Runs on branches as well, so we know the status of our PRs
   can-i-deploy:
@@ -58,3 +67,318 @@ jobs:
       - name: Deploy
         run: GIT_BRANCH=${GIT_REF:11} make deploy
         if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/test'
+
+
+  # 🤖 AI-Powered Pact Coverage Review
+  pact-coverage-review:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Download Pact files
+        uses: actions/download-artifact@v4
+        with:
+          name: pact-files-pactflow-example-provider
+          path: pacts/
+      
+      - name: Verify Pact files
+        run: |
+          echo "Checking for Pact files..."
+          ls -la pacts/ || echo "No pacts directory found"
+          if [ -d "pacts" ]; then
+            echo "Pact files found:"
+            find pacts -name "*.json" -exec echo "  {}" \; -exec head -5 {} \;
+          fi
+      
+      - name: Install Claude CLI
+        run: npm install -g @anthropic-ai/claude-code
+      
+      - name: Create MCP config for Claude CLI
+        run: |
+          mkdir -p ~/.config/claude
+          cat > ~/.config/claude/mcp.json << 'EOF'
+          {
+            "mcpServers": {
+              "smartbear": {
+                "command": "npx",
+                "type": "stdio",
+                "args": ["-y", "@smartbear/mcp-tools"],
+                "env": {
+                  "PACT_BROKER_BASE_URL": "${{ env.PACT_BROKER_BASE_URL }}",
+                  "PACT_BROKER_TOKEN": "${{ env.PACT_BROKER_TOKEN }}"
+                }
+              }
+            }
+          }
+          EOF
+          
+      - name: Run Pact coverage analysis
+        id: coverage-analysis
+        run: |
+          # Generate detailed coverage analysis
+          node .github/scripts/analyze-pact-coverage.js > coverage-analysis.md
+          
+          # Extract coverage percentage for workflow decisions
+          COVERAGE_PERCENT=$(node -e "
+            const fs = require('fs');
+            try {
+              const data = JSON.parse(fs.readFileSync('coverage-report.json', 'utf8'));
+              console.log(data.summary.coveragePercentage);
+            } catch (e) {
+              console.log('0');
+            }
+          ")
+          
+          echo "coverage_percent=$COVERAGE_PERCENT" >> $GITHUB_OUTPUT
+          echo "Coverage: $COVERAGE_PERCENT%"
+                
+      - name: Generate improved Pact tests
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Create specific analysis for PR changes
+          cat > pr_analysis_prompt.txt << 'EOF'
+          Analyze the specific changes in this PR that affect the API client and/or Pact tests, then generate concrete code to achieve 100% test coverage.
+          
+          **Changed Files:** ${{ steps.check-changes.outputs.changed_files }}
+          
+          **Primary Tasks:**
+          1. **Change Analysis**: Review the specific changes made to API client code
+          2. **Gap Identification**: Identify if new API methods were added or existing ones modified
+          3. **Coverage Assessment**: Check if corresponding Pact tests exist for the changes
+          4. **Code Generation**: Use SmartBear MCP tools to generate complete, runnable Pact tests
+          5. **Specification Alignment**: Verify the changes align with the OpenAPI specification
+          
+          **Code Generation Requirements:**
+          - Use `mcp__smartbear__contract-testing__generate_pact_tests` to create comprehensive Pact tests
+          - Generate tests for EVERY API method that lacks coverage
+          - Include ALL scenarios: 200 (success), 400 (bad request), 401 (unauthorized), 404 (not found)
+          - Follow the project's test template and instructions exactly
+          - Generate complete, runnable TypeScript code that can replace src/api.pact.spec.ts
+          
+          **Expected Output:**
+          1. **Analysis Summary**: What changed and what needs testing
+          2. **Coverage Gaps**: Specific missing tests identified
+          3. **Generated Code**: Complete Pact test file content using SmartBear MCP tools
+          4. **Implementation Guide**: Step-by-step instructions for the developer
+          
+          **SmartBear MCP Tool Usage:**
+          For each API method lacking coverage, call `mcp__smartbear__contract-testing__generate_pact_tests` with:
+          ```json
+          {
+            "language": "typescript",
+            "code": [
+              {"filename": "api.js", "body": "[API client code]"},
+              {"filename": "product.js", "body": "[Product model code]"}
+            ],
+            "openapi": {
+              "document": "[OpenAPI spec]",
+              "matcher": {
+                "path": "[specific endpoint path]",
+                "methods": ["GET", "POST", "DELETE"],
+                "statusCodes": [200, 400, 401, 404],
+                "operationId": "[operation ID]"
+              }
+            },
+            "testTemplate": {"body": "[Pact test template]"},
+            "additionalInstructions": "Follow test.instructions.txt exactly. Cover all HTTP status codes. Use Jest with async/await. Include proper authorization headers."
+          }
+          ```
+
+          Adjust the arguments as needed for each endpoint.
+          
+          **Goal**: Generate a complete, working Pact test suite that achieves 100% coverage of the API client.
+          EOF
+          
+          # Run targeted analysis with full tool access
+          cat pr_analysis_prompt.txt | claude \
+            --mcp-config ~/.config/claude/mcp.json \
+            --allowedTools "Read,Write,Bash,mcp__smartbear__contract-testing__generate_pact_tests,mcp__smartbear__contract-testing__review_pact_tests,mcp__smartbear__contract-testing__get_provider_states" \
+            --permission-mode acceptEdits \
+            --print \
+            --output-format text \
+            --add-dir . > pr-recommendations.md
+      
+      - name: Comment on PR with Analysis
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Read all generated analyses
+            let baseAnalysis = '';
+            let comprehensiveAnalysis = '';
+            let prRecommendations = '';
+            let generatedTests = '';
+            let coverageStats = '';
+            
+            try {
+              baseAnalysis = fs.readFileSync('coverage-analysis.md', 'utf8');
+            } catch (e) {
+              baseAnalysis = '⚠️ Could not generate base coverage analysis';
+            }
+            
+            try {
+              generatedTests = fs.readFileSync('pr-recommendations.md', 'utf8');
+            } catch (e) {
+              generatedTests = '';
+            }
+            
+            // Read current Pact test file for comparison
+            let currentPactTests = '';
+            try {
+              currentPactTests = fs.readFileSync('src/api.pact.spec.ts', 'utf8');
+            } catch (e) {
+              currentPactTests = '// No existing Pact tests found';
+            }
+            
+            // Get coverage statistics
+            try {
+              const coverageData = JSON.parse(fs.readFileSync('coverage-report.json', 'utf8'));
+              const stats = coverageData.summary;
+              
+              console.log('Coverage data:', JSON.stringify(stats, null, 2));
+              
+              coverageStats = `**📊 Quick Stats:**
+              - 🎯 Coverage: ${stats.coveragePercentage}%
+              - 📝 API Methods: ${stats.totalApiMethods}
+              - ✅ Covered: ${stats.coveredMethods}
+              - ❌ Missing: ${stats.totalApiMethods - stats.coveredMethods}
+              - 🔄 Pact Interactions: ${stats.totalPactInteractions}`;
+            } catch (e) {
+              console.log('Error reading coverage data:', e.message);
+              coverageStats = '⚠️ Could not load coverage statistics';
+            }
+            
+            // Determine urgency level based on coverage
+            const coveragePercent = parseInt("${{ steps.coverage-analysis.outputs.coverage_percent }}");
+            let urgencyIcon = '🟢';
+            let urgencyText = 'Good';
+            
+            if (coveragePercent < 50) {
+              urgencyIcon = '🔴';
+              urgencyText = 'Critical';
+            } else if (coveragePercent < 80) {
+              urgencyIcon = '🟡';
+              urgencyText = 'Needs Attention';
+            }
+            
+            // Build comment body using string concatenation to avoid YAML issues
+            let commentBody = `## 🤖 AI-Powered Pact Coverage Analysis ${urgencyIcon}\n\n`;
+            commentBody += `**Status:** ${urgencyText} (${coveragePercent}% coverage)\n\n`;
+            commentBody += `${coverageStats}\n\n`;
+            
+            commentBody += `<details>\n<summary>📋 <strong>Base Coverage Analysis</strong></summary>\n\n${baseAnalysis}\n\n</details>\n\n`;
+            
+            if (comprehensiveAnalysis) {
+              commentBody += `<details>\n<summary>🔬 <strong>SmartBear MCP Comprehensive Analysis</strong></summary>\n\n${comprehensiveAnalysis}\n\n</details>\n\n`;
+            }
+            
+            if (generatedTests) {
+              commentBody += `<details>\n<summary>💻 <strong>Generated Pact Test Code</strong></summary>\n\n`;
+              commentBody += `The following Pact test code was generated using SmartBear MCP tools to improve coverage:\n\n`;
+              commentBody += `**📁 Suggested content for \`src/api.pact.spec.ts\`:**\n\n`;
+              commentBody += `\`\`\`typescript\n`;
+              commentBody += generatedTests;
+              
+              commentBody += `\n\`\`\`\n\n`;
+              commentBody += `**📋 Implementation Steps:**\n`;
+              commentBody += `1. Review the generated test code above\n`;
+              commentBody += `2. Replace the content of \`src/api.pact.spec.ts\` with the generated code\n`;
+              commentBody += `3. Run \`npm run test:pact\` to verify the tests pass\n`;
+              commentBody += `4. Commit the changes to achieve 100% API client coverage\n\n`;
+              commentBody += `**🔄 Before vs After Comparison:**\n\n`;
+              commentBody += `<details>\n<summary>📄 <strong>Current Pact Tests (Before)</strong></summary>\n\n`;
+              commentBody += `\`\`\`typescript\n`;
+              
+              if (currentPactTests.length > 1500) {
+                commentBody += currentPactTests.substring(0, 1500) + '\n\n// ... (truncated)';
+              } else {
+                commentBody += currentPactTests;
+              }
+              
+              commentBody += `\n\`\`\`\n\n</details>\n\n</details>\n\n`;
+            }
+            
+            commentBody += `## 📋 Next Steps\n\n`;
+            
+            if (coveragePercent < 80) {
+              commentBody += `### ⚠️ Action Required (Coverage < 80%)\n`;
+              commentBody += `- [ ] **Priority**: Add missing Pact tests for uncovered API methods\n`;
+              commentBody += `- [ ] **Review**: Check the SmartBear MCP generated test code above\n`;
+              commentBody += `- [ ] **Implement**: Use the generated tests as a starting point\n\n`;
+            }
+            
+            commentBody += `### 📋 General Tasks\n`;
+            commentBody += `- [ ] Review coverage analysis and recommendations above\n`;
+            commentBody += `- [ ] Add missing Pact test scenarios (especially error cases)\n`;
+            commentBody += `- [ ] Ensure all API client methods have corresponding Pact tests\n`;
+            commentBody += `- [ ] Verify error scenarios (400, 401, 404) are properly covered\n`;
+            commentBody += `- [ ] Run \`npm run test:pact\` locally to validate any changes\n\n`;
+            
+            commentBody += `### 🔧 Quick Commands\n\n`;
+            commentBody += `**Generate comprehensive Pact tests using Claude + SmartBear MCP:**\n`;
+            commentBody += `\`\`\`bash\n`;
+            commentBody += `claude -p --allowedTools "Read,Write,Bash,mcp__smartbear__generate_pact" --permission-mode acceptEdits "Create or update the pact tests in this project with the latest changes in the API client. Use SmartBear MCP tools to generate the updates, passing in the relevant files (api client, domain models, OpenAPI specification, templates, instructions) for context. Call the MCP tools once for each endpoint, and combine the results. Run the tests and fix any errors"\n`;
+            commentBody += `\`\`\`\n\n`;
+            commentBody += `**Run Pact tests:**\n`;
+            commentBody += `\`\`\`bash\n`;
+            commentBody += `npm run test:pact\n`;
+            commentBody += `\`\`\`\n\n`;
+            commentBody += `**Analyze specific endpoint coverage:**\n`;
+            commentBody += `\`\`\`bash\n`;
+            commentBody += `node .github/scripts/analyze-pact-coverage.js\n`;
+            commentBody += `\`\`\`\n\n`;
+            commentBody += `---\n\n`;
+            commentBody += `<sub>🔄 This analysis was generated by Claude AI with SmartBear MCP contract testing tools | Updated: ${new Date().toISOString()}</sub>\n\n`;
+            commentBody += `<sub>💡 **Tip**: The SmartBear MCP tools provide AI-powered contract test generation and review capabilities specifically designed for API testing workflows.</sub>`;
+            
+            // Post comment
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: commentBody
+            });
+            
+            // Add labels based on coverage
+            const labels = [];
+            if (coveragePercent < 50) {
+              labels.push('pact-coverage-critical');
+            } else if (coveragePercent < 80) {
+              labels.push('pact-coverage-needs-attention');
+            } else {
+              labels.push('pact-coverage-good');
+            }
+            
+            labels.push('automated-pact-analysis');
+            
+            try {
+              await github.rest.issues.addLabels({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: labels
+              });
+            } catch (labelError) {
+              console.log('Could not add labels (labels may not exist):', labelError.message);
+            }
+      
+      - name: Upload Analysis Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pact-coverage-analysis-${{ github.event.pull_request.number }}
+          path: |
+            coverage-analysis.md
+            generated-pact-tests.ts
+            coverage-report.json
