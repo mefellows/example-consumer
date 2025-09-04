@@ -201,7 +201,7 @@ jobs:
           
           # Run targeted analysis with full tool access
           echo "=== RUNNING CLAUDE ANALYSIS ==="
-          cat pr_analysis_prompt.txt | claude \
+          cat pr_analysis_prompt.txt | claude -d \
             --mcp-config ~/.config/claude/mcp.json \
             --allowedTools "Read,Write,Bash,mcp__smartbear__contract-testing_generate_pact_tests,mcp__smartbear__contract-testing_review_pact_tests,mcp__smartbear__contract-testing_get_provider_states" \
             --permission-mode acceptEdits \
