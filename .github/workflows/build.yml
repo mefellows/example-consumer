@@ -139,6 +139,26 @@ jobs:
           
           echo "coverage_percent=$COVERAGE_PERCENT" >> $GITHUB_OUTPUT
           echo "Coverage: $COVERAGE_PERCENT%"
+      
+      - name: Test MCP connectivity
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          echo "=== TESTING MCP SERVER CONNECTIVITY ==="
+          # Test if the MCP server can start (with timeout)
+          echo "Testing SmartBear MCP server startup..."
+          timeout 30s npx -y @smartbear/mcp@latest 2>&1 | head -10 || echo "MCP server test completed or timed out"
+          
+          echo ""
+          echo "=== TESTING MCP TOOLS AVAILABILITY ==="
+          # Quick test to see if MCP tools are discovered
+          timeout 60s echo "List available tools" | claude \
+            --mcp-config ~/.config/claude/mcp.json \
+            --print \
+            --output-format text > mcp-discovery.md 2>&1 || echo "MCP discovery test completed"
+          
+          echo "MCP discovery result:"
+          cat mcp-discovery.md 2>/dev/null || echo "No MCP discovery output"
                 
       - name: Generate improved Pact tests
         env:
@@ -199,19 +219,67 @@ jobs:
           CRITICAL: The output MUST contain complete TypeScript code in ```typescript blocks that can be copied directly to src/api.pact.spec.ts
           EOF
           
-          # Run targeted analysis with full tool access
+          # Pre-flight checks
+          echo "=== PRE-FLIGHT CHECKS ==="
+          echo "Checking Claude CLI installation..."
+          claude --version || echo "Claude CLI version check failed"
+          
+          echo "Checking MCP config..."
+          ls -la ~/.config/claude/ || echo "No Claude config directory"
+          cat ~/.config/claude/mcp.json || echo "No MCP config file"
+          
+          echo "Checking environment..."
+          echo "ANTHROPIC_API_KEY length: ${#ANTHROPIC_API_KEY}"
+          echo "Current directory: $(pwd)"
+          echo "Available space: $(df -h . | tail -1)"
+          
+          # Test basic Claude functionality first
+          echo "=== TESTING BASIC CLAUDE FUNCTIONALITY ==="
+          echo "Testing basic Claude command without MCP..."
+          timeout 60s echo "Hello, can you respond with 'Claude is working'?" | claude --print --output-format text > claude-basic-test.md 2>&1 || {
+            echo "Basic Claude test failed!"
+            echo "Basic test output:"
+            cat claude-basic-test.md 2>/dev/null || echo "No basic test output"
+          }
+          
+          echo "Basic Claude test result:"
+          cat claude-basic-test.md 2>/dev/null || echo "No basic test output available"
+          
+          # Run targeted analysis with timeout and better error handling
           echo "=== RUNNING CLAUDE ANALYSIS ==="
-          cat pr_analysis_prompt.txt | claude -d \
-            --mcp-config ~/.config/claude/mcp.json \
-            --allowedTools "Read,Write,Bash,mcp__smartbear__contract-testing_generate_pact_tests,mcp__smartbear__contract-testing_review_pact_tests,mcp__smartbear__contract-testing_get_provider_states" \
-            --permission-mode acceptEdits \
-            --print \
-            --output-format text \
-            --add-dir . > pr-recommendations.md
+          echo "Starting Claude analysis with 5-minute timeout..."
+          
+          timeout 300s bash -c '
+            cat pr_analysis_prompt.txt | claude -d \
+              --mcp-config ~/.config/claude/mcp.json \
+              --allowedTools "Read,Write,Bash,mcp__smartbear__contract-testing_generate_pact_tests,mcp__smartbear__contract-testing_review_pact_tests,mcp__smartbear__contract-testing_get_provider_states" \
+              --permission-mode acceptEdits \
+              --print \
+              --output-format text \
+              --add-dir . > pr-recommendations.md 2>&1
+          ' || {
+            echo "=== CLAUDE ANALYSIS FAILED OR TIMED OUT ==="
+            echo "Exit code: $?"
+            echo "Checking partial output..."
+            if [ -f pr-recommendations.md ]; then
+              echo "Partial output found ($(wc -c < pr-recommendations.md) chars):"
+              head -50 pr-recommendations.md
+            else
+              echo "No output file created"
+            fi
+            
+            echo "=== TRYING SIMPLIFIED APPROACH ==="
+            echo "Using basic Claude without MCP tools..."
+            timeout 120s echo "Generate comprehensive TypeScript Pact tests for API client with methods getAllProducts, getProduct, deleteProduct. Include all HTTP status scenarios (200, 400, 401, 404). Output complete working code in \`\`\`typescript blocks." | claude \
+              --permission-mode acceptEdits \
+              --print \
+              --output-format text \
+              --add-dir . > pr-recommendations.md 2>&1 || echo "Simplified approach also failed"
+          }
           
           echo "=== CLAUDE EXECUTION COMPLETED ==="
-          echo "Output file size: $(wc -c < pr-recommendations.md) characters"
-          echo "Output line count: $(wc -l < pr-recommendations.md) lines"
+          echo "Final output file size: $(wc -c < pr-recommendations.md 2>/dev/null || echo '0') characters"
+          echo "Final output line count: $(wc -l < pr-recommendations.md 2>/dev/null || echo '0') lines"
           
       # - name: Test MCP tools directly
       #   env:
