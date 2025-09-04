@@ -110,7 +110,7 @@ jobs:
               "smartbear": {
                 "command": "npx",
                 "type": "stdio",
-                "args": ["-y", "@smartbear/mcp-tools"],
+                "args": ["-y", "@smartbear/mcp@latest"],
                 "env": {
                   "PACT_BROKER_BASE_URL": "${{ env.PACT_BROKER_BASE_URL }}",
                   "PACT_BROKER_TOKEN": "${{ env.PACT_BROKER_TOKEN }}"
