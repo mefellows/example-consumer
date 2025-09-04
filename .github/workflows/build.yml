@@ -119,7 +119,7 @@ jobs:
             }
           }
           EOF
-          
+      
       - name: Run Pact coverage analysis
         id: coverage-analysis
         run: |
@@ -168,7 +168,7 @@ jobs:
           ```
           
           MANDATORY REQUIREMENTS:
-          - Call mcp__smartbear__contract-testing__generate_pact_tests for each missing API method
+          - Call mcp__smartbear__contract-testing_generate_pact_tests for each missing API method
           - Generate tests for: getAllProducts, getProduct, deleteProduct  
           - Include scenarios: 200 (success), 400 (bad request), 401 (unauthorized), 404 (not found)
           - Use Jest describe/test structure with async/await
@@ -179,7 +179,7 @@ jobs:
           EXECUTION STEPS:
           1. Read the current API client (src/api.js) and model (src/product.js)
           2. Read the existing test template (src/pact.test.template) 
-          3. For each missing API method, call the SmartBear MCP generate_pact_tests tool
+          3. For each missing API method, call the SmartBear MCP mcp__smartbear__contract-testing_generate_pact_tests tool
           4. Combine all generated tests into one complete TypeScript file
           5. Output the complete file wrapped in ```typescript blocks
           
@@ -200,98 +200,24 @@ jobs:
           EOF
           
           # Run targeted analysis with full tool access
+          echo "=== RUNNING CLAUDE ANALYSIS ==="
           cat pr_analysis_prompt.txt | claude \
             --mcp-config ~/.config/claude/mcp.json \
-            --allowedTools "Read,Write,Bash,mcp__smartbear__contract-testing__generate_pact_tests,mcp__smartbear__contract-testing__review_pact_tests,mcp__smartbear__contract-testing__get_provider_states" \
+            --allowedTools "Read,Write,Bash,mcp__smartbear__contract-testing_generate_pact_tests,mcp__smartbear__contract-testing_review_pact_tests,mcp__smartbear__contract-testing_get_provider_states" \
             --permission-mode acceptEdits \
             --print \
             --output-format text \
             --add-dir . > pr-recommendations.md
-            
+          
+          echo "=== CLAUDE EXECUTION COMPLETED ==="
+          echo "Output file size: $(wc -c < pr-recommendations.md) characters"
+          echo "Output line count: $(wc -l < pr-recommendations.md) lines"
+                      
          
       - name: Debug Claude output and extract code
         run: |
           echo "=== DEBUGGING CLAUDE OUTPUT ==="
-          
-          if [ -f "pr-recommendations.md" ]; then
-            echo "✅ pr-recommendations.md exists"
-            echo "File size: $(wc -c < pr-recommendations.md) characters"
-            echo "Line count: $(wc -l < pr-recommendations.md) lines"
-            echo ""
-            
-            echo "=== FIRST 50 LINES OF CLAUDE OUTPUT ==="
-            head -50 pr-recommendations.md
-            echo ""
-            echo "=== END OF SAMPLE ==="
-            echo ""
-            
-            # Check for any code block markers
-            echo "=== SEARCHING FOR CODE BLOCKS ==="
-            echo "Looking for code block markers:"
-            grep -n "\`\`\`" pr-recommendations.md || echo "❌ No code block markers found"
-            echo ""
-            
-            # Look for TypeScript-specific patterns
-            echo "Looking for TypeScript patterns:"
-            grep -n -i "typescript\|describe\|test\|expect\|import.*pact" pr-recommendations.md || echo "❌ No TypeScript test patterns found"
-            echo ""
-            
-            # Try different extraction patterns
-            echo "=== ATTEMPTING CODE EXTRACTION ==="
-            
-            # Method 1: Standard TypeScript blocks
-            awk '
-              /```typescript/ { in_code=1; next }
-              /```ts/ { in_code=1; next }
-              /```/ && in_code { in_code=0; next }
-              in_code { print }
-            ' pr-recommendations.md > generated-pact-tests-method1.ts
-            
-            # Method 2: Any code block that might contain TypeScript
-            awk '
-              /```[a-zA-Z]*/ { 
-                if ($0 ~ /typescript|ts|javascript|js/) {
-                  in_code=1; next
-                }
-              }
-              /```/ && in_code { in_code=0; next }
-              in_code { print }
-            ' pr-recommendations.md > generated-pact-tests-method2.ts
-            
-            # Method 3: Look for test-like content between any markers
-            sed -n '/```/,/```/p' pr-recommendations.md | grep -E "(describe|test|expect|import)" > generated-pact-tests-method3.ts || true
-            
-            # Check results
-            echo "Method 1 (strict typescript): $(wc -l < generated-pact-tests-method1.ts) lines"
-            echo "Method 2 (any code block): $(wc -l < generated-pact-tests-method2.ts) lines" 
-            echo "Method 3 (test patterns): $(wc -l < generated-pact-tests-method3.ts) lines"
-            
-            # Use the best result
-            if [ -s "generated-pact-tests-method1.ts" ]; then
-              cp generated-pact-tests-method1.ts generated-pact-tests.ts
-              echo "✅ Using Method 1 output"
-            elif [ -s "generated-pact-tests-method2.ts" ]; then
-              cp generated-pact-tests-method2.ts generated-pact-tests.ts
-              echo "✅ Using Method 2 output"
-            elif [ -s "generated-pact-tests-method3.ts" ]; then
-              cp generated-pact-tests-method3.ts generated-pact-tests.ts
-              echo "✅ Using Method 3 output"
-            else
-              echo "❌ No TypeScript code found with any method"
-              touch generated-pact-tests.ts
-            fi
-            
-            if [ -s "generated-pact-tests.ts" ]; then
-              echo ""
-              echo "=== FINAL EXTRACTED CODE (first 20 lines) ==="
-              head -20 generated-pact-tests.ts
-              echo "=== END EXTRACTED CODE ==="
-            fi
-            
-          else
-            echo "❌ pr-recommendations.md not found"
-            touch generated-pact-tests.ts
-          fi
+          echo pr-recommendations.md
       
       - name: Comment on PR with Analysis
         uses: actions/github-script@v7
@@ -430,7 +356,7 @@ jobs:
             commentBody += `### 🔧 Quick Commands\n\n`;
             commentBody += `**Generate comprehensive Pact tests using Claude + SmartBear MCP:**\n`;
             commentBody += `\`\`\`bash\n`;
-            commentBody += `claude -p --allowedTools "Read,Write,Bash,mcp__smartbear__generate_pact" --permission-mode acceptEdits "Create or update the pact tests in this project with the latest changes in the API client. Use SmartBear MCP tools to generate the updates, passing in the relevant files (api client, domain models, OpenAPI specification, templates, instructions) for context. Call the MCP tools once for each endpoint, and combine the results. Run the tests and fix any errors"\n`;
+            commentBody += `claude -p --allowedTools "Read,Write,Bash,contract-testing_generate_pact_tests" --permission-mode acceptEdits "Create or update the pact tests in this project with the latest changes in the API client. Use SmartBear MCP tools to generate the updates, passing in the relevant files (api client, domain models, OpenAPI specification, templates, instructions) for context. Call the MCP tools once for each endpoint, and combine the results. Run the tests and fix any errors"\n`;
             commentBody += `\`\`\`\n\n`;
             commentBody += `**Run Pact tests:**\n`;
             commentBody += `\`\`\`bash\n`;
@@ -482,5 +408,9 @@ jobs:
           name: pact-coverage-analysis-${{ github.event.pull_request.number }}
           path: |
             coverage-analysis.md
+            pr-recommendations.md
             generated-pact-tests.ts
+            generated-pact-tests-method*.ts
             coverage-report.json
+            pr_analysis_prompt.txt
+            mcp_tools_discovery.md
