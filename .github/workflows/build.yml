@@ -213,43 +213,43 @@ jobs:
           echo "Output file size: $(wc -c < pr-recommendations.md) characters"
           echo "Output line count: $(wc -l < pr-recommendations.md) lines"
           
-      - name: Test MCP tools directly
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          echo "=== TESTING MCP TOOLS DIRECTLY ==="
-          echo "Testing if SmartBear MCP tools are available..."
+      # - name: Test MCP tools directly
+      #   env:
+      #     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      #   run: |
+      #     echo "=== TESTING MCP TOOLS DIRECTLY ==="
+      #     echo "Testing if SmartBear MCP tools are available..."
           
-          # Simple test to see if tools are discovered
-          echo "list available tools and their names" | claude \
-            --mcp-config ~/.config/claude/mcp.json \
-            --allowedTools "Read,Write,Bash,mcp__smartbear__contract-testing_generate_pact_tests" \
-            --print \
-            --output-format text > mcp-tool-test.md 2>&1
+      #     # Simple test to see if tools are discovered
+      #     echo "list available tools and their names" | claude \
+      #       --mcp-config ~/.config/claude/mcp.json \
+      #       --allowedTools "Read,Write,Bash,mcp__smartbear__contract-testing_generate_pact_tests" \
+      #       --print \
+      #       --output-format text > mcp-tool-test.md 2>&1
           
-          echo "MCP tool discovery output:"
-          cat mcp-tool-test.md
+      #     echo "MCP tool discovery output:"
+      #     cat mcp-tool-test.md
           
-          echo ""
-          echo "=== TESTING SIMPLE MCP TOOL CALL ==="
-          # Test a simple tool call
-          cat > simple_test_prompt.txt << 'EOF'
-          Please call the mcp__smartbear__contract-testing_generate_pact_tests tool with minimal parameters to test if it's working. Use these parameters:
-          {
-            "language": "typescript",
-            "additionalInstructions": "This is a test call to verify the tool is working"
-          }
-          EOF
+      #     echo ""
+      #     echo "=== TESTING SIMPLE MCP TOOL CALL ==="
+      #     # Test a simple tool call
+      #     cat > simple_test_prompt.txt << 'EOF'
+      #     Please call the mcp__smartbear__contract-testing_generate_pact_tests tool with minimal parameters to test if it's working. Use these parameters:
+      #     {
+      #       "language": "typescript",
+      #       "additionalInstructions": "This is a test call to verify the tool is working"
+      #     }
+      #     EOF
           
-          echo "Testing simple MCP tool call..."
-          cat simple_test_prompt.txt | claude \
-            --mcp-config ~/.config/claude/mcp.json \
-            --allowedTools "mcp__smartbear__contract-testing_generate_pact_tests" \
-            --print \
-            --output-format text > simple-mcp-test.md 2>&1
+      #     echo "Testing simple MCP tool call..."
+      #     cat simple_test_prompt.txt | claude \
+      #       --mcp-config ~/.config/claude/mcp.json \
+      #       --allowedTools "mcp__smartbear__contract-testing_generate_pact_tests" \
+      #       --print \
+      #       --output-format text > simple-mcp-test.md 2>&1
           
-          echo "Simple MCP test output:"
-          cat simple-mcp-test.md
+      #     echo "Simple MCP test output:"
+      #     cat simple-mcp-test.md
                       
          
       - name: Debug Claude output and extract code
@@ -257,43 +257,6 @@ jobs:
           echo "=== DEBUGGING CLAUDE OUTPUT ==="
           echo "Full Claude output:"
           cat pr-recommendations.md
-          echo ""
-          echo "=== SEARCHING FOR TYPESCRIPT CODE BLOCKS ==="
-          if grep -q "```typescript" pr-recommendations.md; then
-            echo "✅ Found TypeScript code blocks!"
-            echo "Extracting TypeScript code..."
-            # Extract everything between ```typescript and ``` 
-            sed -n '/```typescript/,/```/p' pr-recommendations.md | sed '1d;$d' > generated-pact-tests.ts
-            echo "Extracted $(wc -l < generated-pact-tests.ts) lines of TypeScript code"
-            echo "First few lines of extracted code:"
-            head -10 generated-pact-tests.ts
-          else
-            echo "❌ No TypeScript code blocks found in output"
-            echo "Checking for any code blocks..."
-            if grep -q "```" pr-recommendations.md; then
-              echo "Found other code blocks:"
-              grep -n "```" pr-recommendations.md
-            else
-              echo "No code blocks found at all"
-            fi
-          fi
-          
-          echo ""
-          echo "=== CHECKING MCP TOOL USAGE ==="
-          if grep -q "mcp__smartbear__contract-testing" pr-recommendations.md; then
-            echo "✅ Found SmartBear MCP tool references"
-          else
-            echo "❌ No SmartBear MCP tool references found"
-          fi
-          
-          echo ""
-          echo "=== CHECKING FOR ERROR MESSAGES ==="
-          if grep -qi "error\|failed\|cannot\|unable" pr-recommendations.md; then
-            echo "⚠️ Potential errors found:"
-            grep -i "error\|failed\|cannot\|unable" pr-recommendations.md || echo "No specific error patterns"
-          else
-            echo "✅ No obvious error messages detected"
-          fi
       
       - name: Comment on PR with Analysis
         uses: actions/github-script@v7
