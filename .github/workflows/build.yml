@@ -146,56 +146,41 @@ jobs:
         run: |
           # Create specific analysis for PR changes
           cat > pr_analysis_prompt.txt << 'EOF'
-          Analyze the specific changes in this PR that affect the API client and/or Pact tests, then generate concrete code to achieve 100% test coverage.
+          You are an expert in API testing and Pact contract testing. Your goal is to analyze this PR and generate complete, working Pact test code to achieve 100% API client coverage.
           
-          **Changed Files:** ${{ steps.check-changes.outputs.changed_files }}
+          **PRIMARY OBJECTIVE: Generate complete TypeScript Pact test code that can be directly copied into src/api.pact.spec.ts**
           
-          **Primary Tasks:**
-          1. **Change Analysis**: Review the specific changes made to API client code
-          2. **Gap Identification**: Identify if new API methods were added or existing ones modified
-          3. **Coverage Assessment**: Check if corresponding Pact tests exist for the changes
-          4. **Code Generation**: Use SmartBear MCP tools to generate complete, runnable Pact tests
-          5. **Specification Alignment**: Verify the changes align with the OpenAPI specification
+          **REQUIRED OUTPUT FORMAT:**
+          1. **Brief Analysis** (2-3 sentences about what needs testing)
+          2. **Complete TypeScript Code Block** - This is the most important part:
+          
+          ```typescript
+          [COMPLETE PACT TEST FILE CONTENT HERE - must be ready to copy/paste into src/api.pact.spec.ts]
+          ```
           
           **Code Generation Requirements:**
-          - Use `mcp__smartbear__contract-testing__generate_pact_tests` to create comprehensive Pact tests
-          - Generate tests for EVERY API method that lacks coverage
-          - Include ALL scenarios: 200 (success), 400 (bad request), 401 (unauthorized), 404 (not found)
-          - Follow the project's test template and instructions exactly
-          - Generate complete, runnable TypeScript code that can replace src/api.pact.spec.ts
+          - Use `mcp__smartbear__contract-testing__generate_pact_tests` for EVERY missing API method
+          - Generate tests for ALL API methods: getProducts, getProduct, deleteProduct
+          - Include ALL HTTP scenarios: 200 (success), 400 (bad request), 401 (unauthorized), 404 (not found)
+          - Follow the existing test template exactly
+          - Use Jest with async/await pattern
+          - Include proper authorization headers
+          - Generate ONE complete file that replaces the current src/api.pact.spec.ts
           
-          **Expected Output:**
-          1. **Analysis Summary**: What changed and what needs testing
-          2. **Coverage Gaps**: Specific missing tests identified
-          3. **Generated Code**: Complete Pact test file content using SmartBear MCP tools
-          4. **Implementation Guide**: Step-by-step instructions for the developer
-          
-          **SmartBear MCP Tool Usage:**
-          For each API method lacking coverage, call `mcp__smartbear__contract-testing__generate_pact_tests` with:
+          **SmartBear MCP Tool Usage - Call this for each endpoint:**
           ```json
           {
             "language": "typescript",
             "code": [
-              {"filename": "api.js", "body": "[API client code]"},
-              {"filename": "product.js", "body": "[Product model code]"}
+              {"filename": "src/api.js", "body": "[API client code]"},
+              {"filename": "src/product.js", "body": "[Product model]"}
             ],
-            "openapi": {
-              "document": "[OpenAPI spec]",
-              "matcher": {
-                "path": "[specific endpoint path]",
-                "methods": ["GET", "POST", "DELETE"],
-                "statusCodes": [200, 400, 401, 404],
-                "operationId": "[operation ID]"
-              }
-            },
-            "testTemplate": {"body": "[Pact test template]"},
-            "additionalInstructions": "Follow test.instructions.txt exactly. Cover all HTTP status codes. Use Jest with async/await. Include proper authorization headers."
+            "testTemplate": {"filename": "src/pact.test.template", "body": "[template content]"},
+            "additionalInstructions": "Generate complete Pact tests following the template. Include all HTTP status codes (200, 400, 401, 404). Use Jest async/await. Follow test.instructions.txt exactly."
           }
           ```
-
-          Adjust the arguments as needed for each endpoint.
           
-          **Goal**: Generate a complete, working Pact test suite that achieves 100% coverage of the API client.
+          **CRITICAL**: The output must include a complete, working TypeScript file wrapped in ```typescript code blocks that can be directly copied to src/api.pact.spec.ts
           EOF
           
           # Run targeted analysis with full tool access
@@ -206,6 +191,39 @@ jobs:
             --print \
             --output-format text \
             --add-dir . > pr-recommendations.md
+            
+      - name: Extract generated Pact test code
+        run: |
+          # Extract TypeScript code blocks from the Claude output
+          if [ -f "pr-recommendations.md" ]; then
+            echo "Extracting TypeScript code from Claude analysis..."
+            echo "Original file size: $(wc -c < pr-recommendations.md) characters"
+            
+            # Look for code blocks and extract them
+            awk '
+              /```typescript/ { in_code=1; next }
+              /```ts/ { in_code=1; next }
+              /```/ && in_code { in_code=0; next }
+              in_code { print }
+            ' pr-recommendations.md > generated-pact-tests.ts
+            
+            # Verify we got some code
+            if [ -s "generated-pact-tests.ts" ]; then
+              echo "✅ Generated Pact test code extracted ($(wc -l < generated-pact-tests.ts) lines)"
+              echo "First 10 lines:"
+              head -10 generated-pact-tests.ts
+              echo "---"
+            else
+              echo "⚠️ No TypeScript code blocks found in Claude output"
+              echo "Checking for any code-like content..."
+              grep -n -A 5 -B 5 "describe\|test\|expect\|import" pr-recommendations.md || echo "No test patterns found"
+              echo "---"
+              echo "Looking for code block markers:"
+              grep -n "\`\`\`" pr-recommendations.md || echo "No code block markers found"
+            fi
+          else
+            echo "❌ pr-recommendations.md not found"
+          fi
       
       - name: Comment on PR with Analysis
         uses: actions/github-script@v7
@@ -231,6 +249,17 @@ jobs:
               generatedTests = fs.readFileSync('pr-recommendations.md', 'utf8');
             } catch (e) {
               generatedTests = '';
+            }
+            
+            // Try to read the extracted TypeScript code specifically
+            let extractedTestCode = '';
+            try {
+              extractedTestCode = fs.readFileSync('generated-pact-tests.ts', 'utf8');
+              if (extractedTestCode.trim()) {
+                console.log('✅ Found extracted TypeScript code:', extractedTestCode.length, 'characters');
+              }
+            } catch (e) {
+              console.log('⚠️ No extracted TypeScript code found:', e.message);
             }
             
             // Read current Pact test file for comparison
@@ -283,14 +312,19 @@ jobs:
               commentBody += `<details>\n<summary>🔬 <strong>SmartBear MCP Comprehensive Analysis</strong></summary>\n\n${comprehensiveAnalysis}\n\n</details>\n\n`;
             }
             
-            if (generatedTests) {
-              commentBody += `<details>\n<summary>💻 <strong>Generated Pact Test Code</strong></summary>\n\n`;
-              commentBody += `The following Pact test code was generated using SmartBear MCP tools to improve coverage:\n\n`;
-              commentBody += `**📁 Suggested content for \`src/api.pact.spec.ts\`:**\n\n`;
-              commentBody += `\`\`\`typescript\n`;
-              commentBody += generatedTests;
+            if (generatedTests || extractedTestCode) {
+              commentBody += `<details>\n<summary>� <strong>SmartBear MCP Analysis & Recommendations</strong></summary>\n\n`;
+              commentBody += `${generatedTests}\n\n</details>\n\n`;
               
-              commentBody += `\n\`\`\`\n\n`;
+              // If we have extracted TypeScript code, show it prominently
+              if (extractedTestCode.trim()) {
+                commentBody += `<details>\n<summary>💻 <strong>📋 Ready-to-Use Pact Test Code</strong></summary>\n\n`;
+                commentBody += `The following complete Pact test file was generated using SmartBear MCP tools. **Copy and paste this directly into \`src/api.pact.spec.ts\`:**\n\n`;
+                commentBody += `**📁 Complete content for \`src/api.pact.spec.ts\`:**\n\n`;
+                commentBody += `\`\`\`typescript\n`;
+                commentBody += extractedTestCode;
+                commentBody += `\n\`\`\`\n\n`;
+              }
               commentBody += `**📋 Implementation Steps:**\n`;
               commentBody += `1. Review the generated test code above\n`;
               commentBody += `2. Replace the content of \`src/api.pact.spec.ts\` with the generated code\n`;
