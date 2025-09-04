@@ -399,12 +399,7 @@ jobs:
               
               console.log('Coverage data:', JSON.stringify(stats, null, 2));
               
-              coverageStats = `**📊 Quick Stats:**
-              - 🎯 Coverage: ${stats.coveragePercentage}%
-              - 📝 API Methods: ${stats.totalApiMethods}
-              - ✅ Covered: ${stats.coveredMethods}
-              - ❌ Missing: ${stats.totalApiMethods - stats.coveredMethods}
-              - 🔄 Pact Interactions: ${stats.totalPactInteractions}`;
+              coverageStats = \`**📊 Quick Stats:**\\n\\n| Metric | Value |\\n|--------|-------|\\n| 🎯 Coverage | \${stats.coveragePercentage}% |\\n| 📝 API Methods | \${stats.totalApiMethods} |\\n| ✅ Covered | \${stats.coveredMethods} |\\n| ❌ Missing | \${stats.totalApiMethods - stats.coveredMethods} |\\n| 🔄 Pact Interactions | \${stats.totalPactInteractions} |\`;
             } catch (e) {
               console.log('Error reading coverage data:', e.message);
               coverageStats = '⚠️ Could not load coverage statistics';
@@ -581,15 +576,15 @@ jobs:
                   commentBody += `\`\`\`\n\n`;
                   commentBody += `</details>\n\n`;
                 } else {
-                  commentBody += `<details>\n<summary>💻 <strong>�📋 Ready-to-Use Pact Test Code</strong></summary>\n\n`;
+                  commentBody += `<details>\n<summary>💻 <strong>�� Ready-to-Use Pact Test Code</strong></summary>\n\n`;
                   commentBody += `The following complete Pact test file was generated using SmartBear MCP tools. **Copy and paste this directly into \`src/api.pact.spec.ts\`:**\n\n`;
                   commentBody += `**📁 Complete content for \`src/api.pact.spec.ts\`:**\n\n`;
                   commentBody += `\`\`\`typescript\n`;
                   commentBody += extractedTestCode;
-                  commentBody += `\n\`\`\`\n\n`;
-                  commentBody += `</details>\n\n`;
-                }
-              }
+                  commentBody += `\n\\``\`\\n`n`;
+                  commentBody += \</details>n\n`;
+
+                }              }
               commentBody += `**📋 Implementation Steps:**\n`;
               commentBody += `1. Review the generated test code above\n`;
               commentBody += `2. Replace the content of \`src/api.pact.spec.ts\` with the generated code\n`;
