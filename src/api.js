@@ -45,13 +45,4 @@ export class API {
       })
       .then((r) => new Product(r.data));
   }
-
-  async deleteProduct(id) {
-    return axios
-      .delete(this.withPath("/product/" + id), {
-        headers: {
-          Authorization: this.generateAuthToken(),
-        },
-      });
-  }
 }

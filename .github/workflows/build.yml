@@ -5,6 +5,12 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
+    inputs:
+      setup_pact:
+        description: 'Set up Pact testing in this project'
+        required: false
+        default: false
+        type: boolean
 
 env:
   PACT_BROKER_BASE_URL: ${{ secrets.PACT_BROKER_BASE_URL }}
@@ -19,11 +25,8 @@ jobs:
     strategy:
       matrix:
         pact_provider: [
-            # "pactflow-example-bi-directional-provider-dredd",
-            # "pactflow-example-bi-directional-provider-restassured",
-            # "pactflow-example-bi-directional-provider-postman",
-            'pactflow-example-provider'
-          ]
+          'pactflow-example-provider'
+        ]
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
@@ -34,70 +37,22 @@ jobs:
       - name: Test
         env:
           PACT_PROVIDER: ${{ matrix.pact_provider }}
-        run: make test
-      - name: Publish pacts between pactflow-example-consumer and ${{ matrix.pact_provider }}
-        run: GIT_BRANCH=${GIT_REF:11} make publish_pacts
-        env:
-          PACT_PROVIDER: ${{ matrix.pact_provider }}
-      
-      - name: Upload Pact files
-        uses: actions/upload-artifact@v4
+        run: npm t
+
+  # 🚀 AI-Powered Pact Setup Job
+  # Runs on manual trigger to set up comprehensive Pact testing
+  pact-setup:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.setup_pact == 'true'
+    steps:
+      - uses: actions/checkout@v3
         with:
-          name: pact-files-${{ matrix.pact_provider }}
-          path: pacts/
-          retention-days: 1
-
-  # Runs on branches as well, so we know the status of our PRs
-  can-i-deploy:
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - uses: actions/checkout@v3
-      - run: docker pull pactfoundation/pact-cli:latest
-      - name: Can I deploy?
-        run: GIT_BRANCH=${GIT_REF:11} make can_i_deploy
-
-  # Only deploy from master
-  deploy:
-    runs-on: ubuntu-latest
-    needs: can-i-deploy
-    steps:
-      - uses: actions/checkout@v3
-      - run: docker pull pactfoundation/pact-cli:latest
-      - name: Deploy
-        run: GIT_BRANCH=${GIT_REF:11} make deploy
-        if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/test'
-
-
-  # 🤖 AI-Powered Pact Coverage Review
-  # Uses Claude AI instead of JavaScript analysis script for intelligent coverage analysis
-  pact-coverage-review:
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v3
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      
       - uses: actions/setup-node@v3
         with:
           node-version: '18'
-      
-      - name: Install dependencies
-        run: npm install
-      
-      - name: Download Pact files
-        uses: actions/download-artifact@v4
-        with:
-          name: pact-files-pactflow-example-provider
-          path: pacts/
-      
-      - name: Verify Pact files
-        run: |
-          echo "Checking for Pact files..."
-          ls -la pacts/ || echo "No pacts directory found"
-          if [ -d "pacts" ]; then
-            echo "Pact files found:"
-            find pacts -name "*.json" -exec echo "  {}" \; -exec head -5 {} \;
-          fi
       
       - name: Install Claude CLI
         run: npm install -g @anthropic-ai/claude-code
@@ -121,172 +76,167 @@ jobs:
           }
           EOF
       
-      - name: Run Pact coverage analysis with AI
-        id: coverage-analysis
+      - name: Run Pact setup with AI
         env:
+          # Note: ANTHROPIC_API_KEY secret must be configured in repository settings
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          echo "=== Starting AI-Powered Pact Coverage Analysis ==="
+          echo "=== Starting AI-Powered Pact Setup ==="
           
-          # Use the refactored script for coverage analysis
-          chmod +x scripts/pact-coverage-analyzer.sh
-          ./scripts/pact-coverage-analyzer.sh
+          # Make script executable and run it
+          chmod +x scripts/pact-setup.sh
+          ./scripts/pact-setup.sh
           
-          # Extract basic coverage info for workflow decisions
-          COVERAGE_PERCENT=unknown  # Default fallback
+          echo "=== Setup Complete ==="
           
-          # Check if coverage-analysis.md was created and has content
-          if [ ! -f "coverage-analysis.md" ]; then
-            echo "❌ ERROR: coverage-analysis.md file was not created"
-            exit 1
-          fi
-          
-          # Check if the file is empty or too small (less than 100 bytes)
-          FILE_SIZE=$(wc -c < coverage-analysis.md)
-          if [ "$FILE_SIZE" -lt 100 ]; then
-            echo "❌ ERROR: coverage-analysis.md file is empty or too small ($FILE_SIZE bytes)"
-            echo "File contents:"
-            cat coverage-analysis.md
-            exit 1
-          fi
-          
-          # Try to extract actual coverage if analysis was successful
-          if grep -q "Coverage Percentage" coverage-analysis.md; then
-            COVERAGE_PERCENT=$(grep "Coverage Percentage" coverage-analysis.md | sed 's/.*|\s*\([0-9.]\+\)%.*/\1/' | head -1)
-            
-            # Validate that we got a numeric value (including decimals)
-            if ! [[ "$COVERAGE_PERCENT" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-              echo "❌ ERROR: Could not extract valid coverage percentage. Found: '$COVERAGE_PERCENT'"
-              echo "Coverage Percentage line found:"
-              grep "Coverage Percentage" coverage-analysis.md
-              exit 1
-            fi
-            
-            # Convert to integer for workflow decisions (round down)
-            COVERAGE_PERCENT_INT=$(printf "%.0f" "$COVERAGE_PERCENT")
+          # Display results
+          if [ -f "pact-setup-results.md" ]; then
+            echo "📋 Setup Results:"
+            cat pact-setup-results.md
           else
-            echo "❌ ERROR: Could not find 'Coverage Percentage' in coverage analysis output"
-            echo "First 20 lines of coverage-analysis.md:"
-            head -20 coverage-analysis.md
+            echo "❌ Setup results file not found"
             exit 1
           fi
-          
-          echo "coverage_percent=$COVERAGE_PERCENT_INT" >> $GITHUB_OUTPUT
-          echo "=== Analysis Complete. Coverage: $COVERAGE_PERCENT% ==="
-          cat coverage-analysis.md
       
-      - name: Generate improved Pact tests
-        id: generate-improved-tests
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: Configure Git
         run: |
-          echo "=== Starting Pact Test Generation ==="
-          
-          # Use the refactored script for test generation
-          chmod +x scripts/pact-test-generator.sh
-          ./scripts/pact-test-generator.sh
-          
-          echo "=== Test Generation Completed ==="
-          cat pr-recommendations.md
-          echo "Output file size: $(wc -c < pr-recommendations.md 2>/dev/null || echo '0') characters"
-          echo "Output line count: $(wc -l < pr-recommendations.md 2>/dev/null || echo '0') lines"
-          
+          git config --global user.name "Pact Setup Bot"
+          git config --global user.email "actions@github.com"
       
-      - name: Comment on PR with Analysis
+      - name: Create feature branch
+        run: |
+          BRANCH_NAME="feat/pact-setup-$(date +%Y%m%d-%H%M%S)"
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+          git checkout -b "$BRANCH_NAME"
+      
+      - name: Commit changes
+        run: |
+          # Add all changed files
+          git add .
+          
+          # Check if there are any changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          
+          # Create commit with detailed message
+          git commit -m "🚀 Set up comprehensive Pact testing
+
+          This commit adds:
+          - Pact testing dependencies and configuration
+          - Comprehensive test suite covering all API endpoints
+          - Test scripts and infrastructure
+          - Generated using SmartBear MCP AI tools
+          
+          Generated on: $(date)
+          Commit: ${{ github.sha }}
+          
+          To run the tests:
+          npm run test:pact
+          
+          To publish contracts:
+          npm run pact:publish"
+      
+      - name: Push branch
+        run: |
+          git push origin "$BRANCH_NAME"
+      
+      - name: Create Pull Request
         uses: actions/github-script@v7
-        if: github.event_name == 'pull_request'
         with:
           script: |
             const fs = require('fs');
             
-            // Read AI-generated coverage analysis
-            let coverageAnalysis = '';
+            // Read setup results for PR description
+            let setupResults = '';
             try {
-              coverageAnalysis = fs.readFileSync('coverage-analysis.md', 'utf8');
+              setupResults = fs.readFileSync('pact-setup-results.md', 'utf8');
             } catch (e) {
-              coverageAnalysis = '⚠️ Could not generate coverage analysis';
+              setupResults = '⚠️ Could not read setup results';
             }
             
-            // Read Claude output with recommendations
-            let claudeRecommendations = '';
-            try {
-              claudeRecommendations = fs.readFileSync('pr-recommendations.md', 'utf8');
-            } catch (e) {
-              claudeRecommendations = '⚠️ Could not generate Claude recommendations';
-            }
+            const prBody = `## 🚀 Automated Pact Testing Setup
             
-            // Get coverage percentage for status
-            const coveragePercent = parseInt("${{ steps.coverage-analysis.outputs.coverage_percent }}") || 0;
-            let statusIcon = '🟢';
-            let statusText = 'Good';
+            This PR sets up comprehensive Pact testing for the project using AI-powered SmartBear MCP tools.
             
-            if (coveragePercent < 50) {
-              statusIcon = '🔴';
-              statusText = 'Critical';
-            } else if (coveragePercent < 80) {
-              statusIcon = '🟡';
-              statusText = 'Needs Attention';
-            }
+            ### 🎯 What This PR Does
             
-            // Build comment with AI analysis
-            let commentBody = '## 🤖 AI-Powered Pact Coverage Analysis ' + statusIcon + '\n\n';
-            commentBody += '**Status:** ' + statusText + ' (' + coveragePercent + '% coverage)\n\n';
+            - ✅ Adds Pact testing dependencies to package.json
+            - ✅ Creates comprehensive test suite covering all API endpoints
+            - ✅ Sets up test infrastructure and configuration
+            - ✅ Includes tests for multiple HTTP status codes (200, 400, 401, 404)
+            - ✅ Follows TypeScript and Jest best practices
+            - ✅ Uses PactV4 specification
             
-            // Include the full AI analysis (which should already contain the summary table)
-            commentBody += coverageAnalysis + '\n\n';
+            ### 📋 Setup Results
             
-            // Add recommendations if available
-            if (claudeRecommendations && claudeRecommendations !== '⚠️ Could not generate Claude recommendations') {
-              commentBody += '<details>\n<summary>🧠 <strong>⚡️ Additional AI Recommendations</strong></summary>\n\n';
-              commentBody += claudeRecommendations + '\n\n</details>\n\n';
-            }
+            <details>
+            <summary>📊 <strong>Detailed Setup Report</strong></summary>
             
-            commentBody += '## 📋 Next Steps\n\n';
-            commentBody += '- [ ] Review the coverage analysis above\n';
-            commentBody += '- [ ] Implement any missing Pact tests identified\n';
-            commentBody += '- [ ] Ensure all HTTP status codes are covered (200, 400, 401, 404)\n';
-            commentBody += '- [ ] Run `npm t` to verify changes\n';
-            commentBody += '- [ ] Commit improvements to increase coverage\n\n';
-            commentBody += '---\n\n';
-            commentBody += '💡 **Tip:** Use [SmartBear MCP tools](https://developer.smartbear.com/smartbear-mcp/docs/mcp-server) for AI-powered contract test generation and review capabilities.\n\n';
-            commentBody += '<sub>✨ Generated by AI-powered analysis | ' + new Date().toISOString() + '</sub>';
+            ${setupResults}
             
-            // Post comment
-            await github.rest.issues.createComment({
-              issue_number: context.issue.number,
+            </details>
+            
+            ### 🧪 How to Test
+            
+            \`\`\`bash
+            # Install dependencies
+            npm install
+            
+            # Run Pact tests
+            npm run test:pact
+            
+            # Run all tests
+            npm test
+            
+            # Publish contracts (requires broker configuration)
+            npm run pact:publish
+            \`\`\`
+            
+            ### 🔄 Next Steps
+            
+            1. Review the generated test files
+            2. Verify test coverage meets your requirements
+            3. Update any test scenarios as needed
+            4. Configure your Pact Broker settings
+            5. Merge this PR to enable Pact testing
+            
+            ---
+            
+            ✨ **Generated automatically by SmartBear MCP AI tools**
+            📅 Created: ${new Date().toISOString()}
+            🤖 Powered by: [SmartBear MCP Server](https://developer.smartbear.com/smartbear-mcp/docs/mcp-server)`;
+            
+            const result = await github.rest.pulls.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: commentBody
+              title: '🚀 Set up comprehensive Pact testing with AI',
+              head: process.env.BRANCH_NAME,
+              base: 'main',
+              body: prBody
             });
             
-            // Add appropriate labels
-            const labels = ['automated-pact-analysis'];
-            if (coveragePercent < 50) {
-              labels.push('pact-coverage-critical');
-            } else if (coveragePercent < 80) {
-              labels.push('pact-coverage-needs-attention');
-            } else {
-              labels.push('pact-coverage-good');
-            }
+            console.log(`Created PR #${result.data.number}: ${result.data.html_url}`);
             
+            // Add labels
             try {
               await github.rest.issues.addLabels({
-                issue_number: context.issue.number,
+                issue_number: result.data.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                labels: labels
+                labels: ['automated-setup', 'pact-testing', 'ai-generated']
               });
             } catch (labelError) {
               console.log('Could not add labels:', labelError.message);
             }
       
-      - name: Upload Analysis Artifacts
+      - name: Upload Setup Artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pact-coverage-analysis-${{ github.event.pull_request.number }}
+          name: pact-setup-results-${{ github.run_id }}
           path: |
-            coverage-analysis.md
-            pr-recommendations.md
-            detailed-prompt.md
-            generalized-pact-prompt.md
+            pact-setup-results.md
+            pact-setup.md
+  
