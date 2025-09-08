@@ -121,22 +121,25 @@ jobs:
           fi
           
           # Create commit with detailed message
-          git commit -m "🚀 Set up comprehensive Pact testing
+          git commit -m "🚀 Set up Pact testing infrastructure
 
-          This commit adds:
+          This commit adds basic Pact testing setup:
           - Pact testing dependencies and configuration
-          - Comprehensive test suite covering all API endpoints
-          - Test scripts and infrastructure
-          - Generated using SmartBear MCP AI tools
+          - Test infrastructure (Jest, TypeScript config)
+          - ONE basic happy path test to prove setup works
+          - Scripts for running and publishing Pact tests
+          - Foundation for future comprehensive testing
           
           Generated on: $(date)
           Commit: ${{ github.sha }}
           
-          To run the tests:
+          To run the basic test:
           npm run test:pact
           
           To publish contracts:
-          npm run pact:publish"
+          npm run pact:publish
+          
+          Note: This is SETUP ONLY - use coverage analysis for comprehensive tests"
       
       - name: Push branch
         run: |
@@ -156,18 +159,18 @@ jobs:
               setupResults = '⚠️ Could not read setup results';
             }
             
-            const prBody = `## 🚀 Automated Pact Testing Setup
+            const prBody = `## 🚀 Pact Testing Infrastructure Setup
             
-            This PR sets up comprehensive Pact testing for the project using AI-powered SmartBear MCP tools.
+            This PR sets up the basic Pact testing infrastructure for the project with a working foundation.
             
             ### 🎯 What This PR Does
             
             - ✅ Adds Pact testing dependencies to package.json
-            - ✅ Creates comprehensive test suite covering all API endpoints
             - ✅ Sets up test infrastructure and configuration
-            - ✅ Includes tests for multiple HTTP status codes (200, 400, 401, 404)
-            - ✅ Follows TypeScript and Jest best practices
+            - ✅ Creates ONE basic happy path test to prove setup works
+            - ✅ Configures Jest and TypeScript for Pact testing
             - ✅ Uses PactV4 specification
+            - ✅ Provides foundation for future comprehensive testing
             
             ### 📋 Setup Results
             
@@ -184,7 +187,7 @@ jobs:
             # Install dependencies
             npm install
             
-            # Run Pact tests
+            # Run the basic Pact test
             npm run test:pact
             
             # Run all tests
@@ -196,24 +199,38 @@ jobs:
             
             ### 🔄 Next Steps
             
-            1. Review the generated test files
-            2. Verify test coverage meets your requirements
-            3. Update any test scenarios as needed
-            4. Configure your Pact Broker settings
-            5. Merge this PR to enable Pact testing
+            1. **Merge this PR** to establish Pact infrastructure
+            2. **Run the basic test** to verify setup works
+            3. **Use separate coverage analysis** to identify missing tests
+            4. **Add comprehensive tests** in follow-up PRs
+            5. **Configure your Pact Broker** settings if needed
+            
+            ### 📝 Important Notes
+            
+            - This PR focuses on **SETUP ONLY** - not comprehensive test coverage
+            - One basic happy path test is included to prove the infrastructure works
+            - Use the existing Pact coverage analysis workflow for comprehensive testing
+            - Future test additions can build on this foundation
             
             ---
             
-            ✨ **Generated automatically by SmartBear MCP AI tools**
+            ✨ **Generated automatically by AI-powered setup**
             📅 Created: ${new Date().toISOString()}
-            🤖 Powered by: [SmartBear MCP Server](https://developer.smartbear.com/smartbear-mcp/docs/mcp-server)`;
+            🎯 **Focus**: Infrastructure setup, not comprehensive testing`;
+            
+            // Get the default branch of the repository
+            const repoInfo = await github.rest.repos.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            const defaultBranch = repoInfo.data.default_branch;
             
             const result = await github.rest.pulls.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: '🚀 Set up comprehensive Pact testing with AI',
+              title: '🚀 Set up Pact testing infrastructure (setup only)',
               head: process.env.BRANCH_NAME,
-              base: 'main',
+              base: defaultBranch,
               body: prBody
             });
             
