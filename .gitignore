@@ -28,5 +28,9 @@ yarn-error.log*
 pacts/
 logs/
 
+# Pact setup files (kept in workflow artifacts only)
+pact-setup.md
+pact-setup-results.md
+
 # IDE
 .vscode

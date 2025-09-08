@@ -111,8 +111,12 @@ jobs:
       
       - name: Commit changes
         run: |
-          # Add all changed files
+          # Add all changed files except setup files
           git add .
+          
+          # Remove setup files from staging (they'll be in artifacts instead)
+          git reset HEAD pact-setup.md || echo "pact-setup.md not found"
+          git reset HEAD pact-setup-results.md || echo "pact-setup-results.md not found"
           
           # Check if there are any changes to commit
           if git diff --staged --quiet; then
