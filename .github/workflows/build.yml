@@ -230,7 +230,8 @@ jobs:
               repo: context.repo.repo,
               title: '🚀 Set up Pact testing infrastructure (setup only)',
               head: process.env.BRANCH_NAME,
-              base: defaultBranch,
+              // base: defaultBranch, // <- this is what we want for other projects
+              base: 'feat/ai-setup',  // For this demo, we want to show only the changes against this branch
               body: prBody
             });
             
