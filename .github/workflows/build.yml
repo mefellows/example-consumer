@@ -2,6 +2,8 @@ name: Build
 
 on:
   push:
+  pull_request:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 env:
@@ -17,7 +19,7 @@ jobs:
     strategy:
       matrix:
         pact_provider: [
-            "pactflow-example-bi-directional-provider-dredd",
+            # "pactflow-example-bi-directional-provider-dredd",
             # "pactflow-example-bi-directional-provider-restassured",
             # "pactflow-example-bi-directional-provider-postman",
             'pactflow-example-provider'
@@ -37,6 +39,13 @@ jobs:
         run: GIT_BRANCH=${GIT_REF:11} make publish_pacts
         env:
           PACT_PROVIDER: ${{ matrix.pact_provider }}
+      
+      - name: Upload Pact files
+        uses: actions/upload-artifact@v4
+        with:
+          name: pact-files-${{ matrix.pact_provider }}
+          path: pacts/
+          retention-days: 1
 
   # Runs on branches as well, so we know the status of our PRs
   can-i-deploy:
@@ -58,3 +67,226 @@ jobs:
       - name: Deploy
         run: GIT_BRANCH=${GIT_REF:11} make deploy
         if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/test'
+
+
+  # 🤖 AI-Powered Pact Coverage Review
+  # Uses Claude AI instead of JavaScript analysis script for intelligent coverage analysis
+  pact-coverage-review:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Download Pact files
+        uses: actions/download-artifact@v4
+        with:
+          name: pact-files-pactflow-example-provider
+          path: pacts/
+      
+      - name: Verify Pact files
+        run: |
+          echo "Checking for Pact files..."
+          ls -la pacts/ || echo "No pacts directory found"
+          if [ -d "pacts" ]; then
+            echo "Pact files found:"
+            find pacts -name "*.json" -exec echo "  {}" \; -exec head -5 {} \;
+          fi
+      
+      - name: Install Claude CLI
+        run: npm install -g @anthropic-ai/claude-code
+      
+      - name: Create MCP config for Claude CLI
+        run: |
+          mkdir -p ~/.config/claude
+          cat > ~/.config/claude/mcp.json << 'EOF'
+          {
+            "mcpServers": {
+              "smartbear": {
+                "command": "npx",
+                "type": "stdio",
+                "args": ["-y", "@smartbear/mcp@latest"],
+                "env": {
+                  "PACT_BROKER_BASE_URL": "${{ env.PACT_BROKER_BASE_URL }}",
+                  "PACT_BROKER_TOKEN": "${{ env.PACT_BROKER_TOKEN }}"
+                }
+              }
+            }
+          }
+          EOF
+      
+      - name: Run Pact coverage analysis with AI
+        id: coverage-analysis
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          echo "=== Starting AI-Powered Pact Coverage Analysis ==="
+          
+          # Use the refactored script for coverage analysis
+          chmod +x scripts/pact-coverage-analyzer.sh
+          ./scripts/pact-coverage-analyzer.sh
+          
+          # Extract basic coverage info for workflow decisions
+          COVERAGE_PERCENT=unknown  # Default fallback
+          
+          # Check if coverage-analysis.md was created and has content
+          if [ ! -f "coverage-analysis.md" ]; then
+            echo "❌ ERROR: coverage-analysis.md file was not created"
+            exit 1
+          fi
+          
+          # Check if the file is empty or too small (less than 100 bytes)
+          FILE_SIZE=$(wc -c < coverage-analysis.md)
+          if [ "$FILE_SIZE" -lt 100 ]; then
+            echo "❌ ERROR: coverage-analysis.md file is empty or too small ($FILE_SIZE bytes)"
+            echo "File contents:"
+            cat coverage-analysis.md
+            exit 1
+          fi
+          
+          # Try to extract actual coverage if analysis was successful
+          if grep -q "Coverage Percentage" coverage-analysis.md; then
+            COVERAGE_PERCENT=$(grep "Coverage Percentage" coverage-analysis.md | sed 's/.*|\s*\([0-9.]\+\)%.*/\1/' | head -1)
+            
+            # Validate that we got a numeric value (including decimals)
+            if ! [[ "$COVERAGE_PERCENT" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+              echo "❌ ERROR: Could not extract valid coverage percentage. Found: '$COVERAGE_PERCENT'"
+              echo "Coverage Percentage line found:"
+              grep "Coverage Percentage" coverage-analysis.md
+              exit 1
+            fi
+            
+            # Convert to integer for workflow decisions (round down)
+            COVERAGE_PERCENT_INT=$(printf "%.0f" "$COVERAGE_PERCENT")
+          else
+            echo "❌ ERROR: Could not find 'Coverage Percentage' in coverage analysis output"
+            echo "First 20 lines of coverage-analysis.md:"
+            head -20 coverage-analysis.md
+            exit 1
+          fi
+          
+          echo "coverage_percent=$COVERAGE_PERCENT_INT" >> $GITHUB_OUTPUT
+          echo "=== Analysis Complete. Coverage: $COVERAGE_PERCENT% ==="
+          cat coverage-analysis.md
+      
+      - name: Generate improved Pact tests
+        id: generate-improved-tests
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          echo "=== Starting Pact Test Generation ==="
+          
+          # Use the refactored script for test generation
+          chmod +x scripts/pact-test-generator.sh
+          ./scripts/pact-test-generator.sh
+          
+          echo "=== Test Generation Completed ==="
+          cat pr-recommendations.md
+          echo "Output file size: $(wc -c < pr-recommendations.md 2>/dev/null || echo '0') characters"
+          echo "Output line count: $(wc -l < pr-recommendations.md 2>/dev/null || echo '0') lines"
+          
+      
+      - name: Comment on PR with Analysis
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Read AI-generated coverage analysis
+            let coverageAnalysis = '';
+            try {
+              coverageAnalysis = fs.readFileSync('coverage-analysis.md', 'utf8');
+            } catch (e) {
+              coverageAnalysis = '⚠️ Could not generate coverage analysis';
+            }
+            
+            // Read Claude output with recommendations
+            let claudeRecommendations = '';
+            try {
+              claudeRecommendations = fs.readFileSync('pr-recommendations.md', 'utf8');
+            } catch (e) {
+              claudeRecommendations = '⚠️ Could not generate Claude recommendations';
+            }
+            
+            // Get coverage percentage for status
+            const coveragePercent = parseInt("${{ steps.coverage-analysis.outputs.coverage_percent }}") || 0;
+            let statusIcon = '🟢';
+            let statusText = 'Good';
+            
+            if (coveragePercent < 50) {
+              statusIcon = '🔴';
+              statusText = 'Critical';
+            } else if (coveragePercent < 80) {
+              statusIcon = '🟡';
+              statusText = 'Needs Attention';
+            }
+            
+            // Build comment with AI analysis
+            let commentBody = '## 🤖 AI-Powered Pact Coverage Analysis ' + statusIcon + '\n\n';
+            commentBody += '**Status:** ' + statusText + ' (' + coveragePercent + '% coverage)\n\n';
+            
+            // Include the full AI analysis (which should already contain the summary table)
+            commentBody += coverageAnalysis + '\n\n';
+            
+            // Add recommendations if available
+            if (claudeRecommendations && claudeRecommendations !== '⚠️ Could not generate Claude recommendations') {
+              commentBody += '<details>\n<summary>🧠 <strong>⚡️ Additional AI Recommendations</strong></summary>\n\n';
+              commentBody += claudeRecommendations + '\n\n</details>\n\n';
+            }
+            
+            commentBody += '## 📋 Next Steps\n\n';
+            commentBody += '- [ ] Review the coverage analysis above\n';
+            commentBody += '- [ ] Implement any missing Pact tests identified\n';
+            commentBody += '- [ ] Ensure all HTTP status codes are covered (200, 400, 401, 404)\n';
+            commentBody += '- [ ] Run `npm t` to verify changes\n';
+            commentBody += '- [ ] Commit improvements to increase coverage\n\n';
+            commentBody += '---\n\n';
+            commentBody += '💡 **Tip:** Use [SmartBear MCP tools](https://developer.smartbear.com/smartbear-mcp/docs/mcp-server) for AI-powered contract test generation and review capabilities.\n\n';
+            commentBody += '<sub>✨ Generated by AI-powered analysis | ' + new Date().toISOString() + '</sub>';
+            
+            // Post comment
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: commentBody
+            });
+            
+            // Add appropriate labels
+            const labels = ['automated-pact-analysis'];
+            if (coveragePercent < 50) {
+              labels.push('pact-coverage-critical');
+            } else if (coveragePercent < 80) {
+              labels.push('pact-coverage-needs-attention');
+            } else {
+              labels.push('pact-coverage-good');
+            }
+            
+            try {
+              await github.rest.issues.addLabels({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: labels
+              });
+            } catch (labelError) {
+              console.log('Could not add labels:', labelError.message);
+            }
+      
+      - name: Upload Analysis Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pact-coverage-analysis-${{ github.event.pull_request.number }}
+          path: |
+            coverage-analysis.md
+            pr-recommendations.md
+            detailed-prompt.md
+            generalized-pact-prompt.md
