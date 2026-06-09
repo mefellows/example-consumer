@@ -85,6 +85,7 @@ jobs:
             echo "Only add or edit tests required to close the uncovered scenarios."
             echo "Preserve existing test style and naming conventions."
             echo "Edit files directly in the local checked-out workspace. Do not use GitHub API/MCP repo reads or writes for source files."
+            echo "Return only JSON in the format {\"files\":[{\"path\":\"relative/path\",\"content\":\"full file contents\"}]}."
             echo ""
             echo "Review markdown:"
             echo ""
@@ -102,6 +103,32 @@ jobs:
             --no-ask-user \
             --agent test-generator | tee generated_changes.md
 
+      - name: Apply generated file changes
+        run: |
+          python - <<'PY'
+          import json
+          import pathlib
+          import re
+
+          text = pathlib.Path('generated_changes.md').read_text()
+          match = re.search(r'\{.*\}', text, re.S)
+          if not match:
+              raise SystemExit('No JSON payload found in generated_changes.md')
+
+          payload = json.loads(match.group(0))
+          files = payload.get('files', [])
+          if not files:
+              raise SystemExit('Generated payload did not contain any files')
+
+          for file_info in files:
+              relative_path = file_info['path']
+              content = file_info['content']
+              output_path = pathlib.Path(relative_path)
+              output_path.parent.mkdir(parents=True, exist_ok=True)
+              output_path.write_text(content)
+              print(f'wrote {relative_path}')
+          PY
+
       - name: Upload generation output artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -113,6 +140,7 @@ jobs:
       - name: Show git status after generation
         run: |
           echo "Changed files after generation:"
+          git diff -- src/api.pact.spec.js || true
           git status --short
 
       - name: Run contract tests

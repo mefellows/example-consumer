@@ -28,6 +28,7 @@ Rules:
 - Do not post comments, open PRs, or write summaries intended for humans.
 - Do not include markdown output unless explicitly asked by the caller.
 - Edit files directly in the local checked-out workspace; do not use GitHub API or MCP repo-content tools to read or write source files.
+- Return only a machine-readable JSON payload in the format {"files":[{"path":"relative/path","content":"full file contents"}]}. Do not wrap it in markdown.
 
 Definition of done:
 - Missing scenarios identified in the provided review are covered by tests.
