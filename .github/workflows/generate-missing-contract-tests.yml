@@ -99,7 +99,20 @@ jobs:
             --allow-tool='shell(git:*)' \
             --allow-tool=write \
             --no-ask-user \
-            --agent test-generator > generated_changes.md
+            --agent test-generator | tee generated_changes.md
+
+      - name: Upload generation output artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-changes
+          path: generated_changes.md
+          if-no-files-found: warn
+
+      - name: Show git diff summary after generation
+        run: |
+          echo "Changed files after generation:"
+          git status --short
 
       - name: Run contract tests
         run: |
