@@ -38,4 +38,10 @@ Example coverage table:
 Total coverage: 80% (4 out of 5 scenarios covered)
 ```
 
-If you identify significant gaps in coverage, create a todo list of tasks to address these gaps in the output.
+When significant gaps exist, append this exact section at the end of the markdown:
+
+### Action
+
+- [ ] Generate missing contract tests
+
+Only include this section when there are uncovered scenarios.

@@ -1,0 +1,128 @@
+name: Generate Missing Contract Tests
+
+on:
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate:
+    if: >-
+      github.event.issue.pull_request != null &&
+      (contains(github.event.comment.body, '- [x] Generate missing contract tests') ||
+       contains(github.event.comment.body, '- [X] Generate missing contract tests'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install dependencies for workflow scripts
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Get PR metadata
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.issue.number }}"
+          PR_JSON=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${{ github.repository }}/pulls/${PR_NUMBER}")
+
+          HEAD_REF=$(echo "$PR_JSON" | jq -r '.head.ref')
+          HEAD_REPO=$(echo "$PR_JSON" | jq -r '.head.repo.full_name')
+          BASE_REPO="${{ github.repository }}"
+
+          echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "head_ref=${HEAD_REF}" >> "$GITHUB_OUTPUT"
+          echo "head_repo=${HEAD_REPO}" >> "$GITHUB_OUTPUT"
+          echo "base_repo=${BASE_REPO}" >> "$GITHUB_OUTPUT"
+
+      - name: Guard unsupported fork PRs
+        if: steps.pr.outputs.head_repo != steps.pr.outputs.base_repo
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment "${{ steps.pr.outputs.pr_number }}" \
+            --body "Warning: I detected the checkbox to generate missing contract tests, but this PR comes from a fork (${{ steps.pr.outputs.head_repo }}). This workflow currently pushes only to branches in ${{ steps.pr.outputs.base_repo }}."
+          exit 1
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.head_ref }}
+
+      - name: Install Copilot CLI
+        run: npm install -g @github/copilot
+
+      - name: Get latest review summary and prepare prompt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ steps.pr.outputs.pr_number }}"
+
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            --jq '.[] | select(.user.login=="github-actions[bot]" and (.body | contains("Contract Testing Review"))) | .body' \
+            | tail -n 1 > latest_review.md
+
+          {
+            echo "You are updating this PR branch in response to a checked checkbox asking to generate missing contract tests."
+            echo ""
+            echo "PR URL: ${{ github.event.issue.html_url }}"
+            echo ""
+            echo "Use the coverage gaps in the following review markdown to implement missing contract tests."
+            echo "Only add or edit tests required to close the uncovered scenarios."
+            echo "Preserve existing test style and naming conventions."
+            echo ""
+            echo "Review markdown:"
+            echo ""
+            cat latest_review.md
+          } > generation_prompt.txt
+
+      - name: Generate missing tests with custom agent
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          copilot -p "$(cat generation_prompt.txt)" \
+            --allow-tool='shell(git:*)' \
+            --allow-tool=write \
+            --no-ask-user \
+            --agent reviewer > generated_changes.md
+
+      - name: Run contract tests
+        run: |
+          npm ci
+          npm test
+
+      - name: Commit and push generated tests
+        id: commit
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "test(contract): generate missing scenarios from PR review"
+          git push origin "HEAD:${{ steps.pr.outputs.head_ref }}"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Comment with result
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ steps.commit.outputs.changed }}" = "true" ]; then
+            gh pr comment "${{ steps.pr.outputs.pr_number }}" \
+              --body "Generated and pushed missing contract tests based on the checked action item."
+          else
+            gh pr comment "${{ steps.pr.outputs.pr_number }}" \
+              --body "No test file changes were generated from the checked action item."
+          fi
