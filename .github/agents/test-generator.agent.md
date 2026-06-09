@@ -27,8 +27,9 @@ Rules:
 - Do not modify unrelated production code unless absolutely required to make tests compile and run.
 - Do not post comments, open PRs, or write summaries intended for humans.
 - Do not include markdown output unless explicitly asked by the caller.
-- Edit files directly in the local checked-out workspace; do not use GitHub API or MCP repo-content tools to read or write source files.
-- Return only a machine-readable JSON payload in the format {"files":[{"path":"relative/path","content":"full file contents"}]}. Do not wrap it in markdown.
+- Edit files directly in the local checked-out workspace using the provided shell and write tools.
+- Do not use GitHub API, MCP repo-content tools, or any external repository read/write path.
+- If a file needs to change, write it locally in place rather than returning a plan or summary.
 
 Definition of done:
 - Missing scenarios identified in the provided review are covered by tests.
