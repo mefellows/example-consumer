@@ -84,6 +84,7 @@ jobs:
             echo "Use the coverage gaps in the following review markdown to implement missing contract tests."
             echo "Only add or edit tests required to close the uncovered scenarios."
             echo "Preserve existing test style and naming conventions."
+            echo "Edit files directly in the local checked-out workspace. Do not use GitHub API/MCP repo reads or writes for source files."
             echo ""
             echo "Review markdown:"
             echo ""
@@ -96,7 +97,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           copilot -p "$(cat generation_prompt.txt)" \
-            --allow-tool='shell(git:*)' \
+            --allow-tool=shell \
             --allow-tool=write \
             --no-ask-user \
             --agent test-generator | tee generated_changes.md
@@ -109,7 +110,7 @@ jobs:
           path: generated_changes.md
           if-no-files-found: warn
 
-      - name: Show git diff summary after generation
+      - name: Show git status after generation
         run: |
           echo "Changed files after generation:"
           git status --short

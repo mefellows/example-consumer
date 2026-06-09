@@ -2,7 +2,9 @@
 name: Contract-Test-Generator
 description: Generates missing contract tests from identified coverage gaps.
 tools:
-  - github/*
+  - write
+  - shell
+  - execute
   - smartbear-local/contract-testing_generate_pact_tests
 mcp-servers:
   custom-mcp:
@@ -25,6 +27,7 @@ Rules:
 - Do not modify unrelated production code unless absolutely required to make tests compile and run.
 - Do not post comments, open PRs, or write summaries intended for humans.
 - Do not include markdown output unless explicitly asked by the caller.
+- Edit files directly in the local checked-out workspace; do not use GitHub API or MCP repo-content tools to read or write source files.
 
 Definition of done:
 - Missing scenarios identified in the provided review are covered by tests.
