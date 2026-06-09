@@ -98,8 +98,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           copilot -p "$(cat generation_prompt.txt)" \
+            --disable-builtin-mcps \
+            --available-tools=shell,write,execute \
             --allow-tool=shell \
             --allow-tool=write \
+            --allow-tool=execute \
             --no-ask-user \
             --agent test-generator | tee generated_changes.md
 
