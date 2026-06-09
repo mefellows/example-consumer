@@ -104,7 +104,7 @@ jobs:
       - name: Run contract tests
         run: |
           npm ci
-          npm test
+          npm test:pact
 
       - name: Commit and push generated tests
         id: commit

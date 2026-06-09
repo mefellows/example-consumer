@@ -6,6 +6,7 @@
     "axios": "^0.27.2"
   },
   "scripts": {
+    "test": "npm run test:pact",
     "test:pact": "cross-env CI=true npx jest --colors --testTimeout 30000 --testMatch \"**/*.pact.spec.js\""
   },
   "devDependencies": {
