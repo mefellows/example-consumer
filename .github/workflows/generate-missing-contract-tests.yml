@@ -99,13 +99,8 @@ jobs:
         run: |
           copilot -p "$(cat generation_prompt.txt)" \
             --disable-builtin-mcps \
-            --available-tools=write,view,grep \
+            --available-tools=write \
             --allow-tool=write \
-            --allow-tool=view \
-            --allow-tool=grep \
-            --deny-tool=shell \
-            --deny-tool=bash \
-            --deny-tool=execute \
             --no-ask-user \
             --agent test-generator | tee generated_changes.md
 

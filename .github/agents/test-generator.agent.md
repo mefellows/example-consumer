@@ -3,9 +3,7 @@ name: Contract-Test-Generator
 description: Generates missing contract tests from identified coverage gaps.
 tools:
   - write
-  - shell
-  - execute
-  - smartbear-local/contract-testing_generate_pact_tests
+  - custom-mcp/*
 mcp-servers:
   custom-mcp:
     type: 'local'
