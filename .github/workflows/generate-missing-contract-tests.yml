@@ -92,7 +92,7 @@ jobs:
             --allow-tool='shell(git:*)' \
             --allow-tool=write \
             --no-ask-user \
-            --agent reviewer > generated_changes.md
+            --agent test-generator > generated_changes.md
 
       - name: Run contract tests
         run: |
