@@ -41,3 +41,7 @@ Definition of done:
 - Missing scenarios identified in the provided review are covered by tests.
 - Existing tests remain compatible.
 - Changes are ready for commit by the workflow.
+
+Before starting
+- List the available tools in the session
+- Warn if any tools are missing that are required to complete the task and explicitly list the ones you need (for example, file editing/viewing tools)
