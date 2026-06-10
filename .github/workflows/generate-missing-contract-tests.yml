@@ -74,7 +74,7 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
             --jq '.[] | select(.user.login=="github-actions[bot]" and (.body | contains("Contract Testing Review"))) | .body' \
-            | tail -n 1 > latest_review.md
+            > latest_review.md
 
           {
             echo "You are updating this PR branch in response to a checked checkbox asking to generate missing contract tests."
