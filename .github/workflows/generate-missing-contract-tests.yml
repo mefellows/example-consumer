@@ -91,6 +91,7 @@ jobs:
             echo ""
             cat latest_review.md
           } > generation_prompt.txt
+          cat generation_prompt.txt
 
       - name: Generate missing tests with custom agent
         env:
