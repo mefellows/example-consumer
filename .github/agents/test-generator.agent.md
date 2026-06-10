@@ -6,6 +6,11 @@ tools:
   - execute
   - write
   - github/*
+  - edit/createFile
+  - create
+  - edit
+  - view
+  - apply_patch
   - custom-mcp/*
 mcp-servers:
   custom-mcp:
