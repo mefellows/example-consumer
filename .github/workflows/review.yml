@@ -20,6 +20,9 @@ jobs:
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COPILOT_PROVIDER_BASE_URL: ${{ secrets.COPILOT_PROVIDER_BASE_URL }}
+          COPILOT_PROVIDER_API_KEY: ${{ secrets.COPILOT_PROVIDER_API_KEY }}
+          COPILOT_MODEL: ${{ secrets.COPILOT_MODEL }}          
         run: |
           # Authenticate and invoke the custom agent
           # 'reviewer' matches the filename 'reviewer.agent.md'
