@@ -112,12 +112,15 @@ jobs:
         env:
           COPILOT_GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COPILOT_PROVIDER_BASE_URL: ${{ secrets.COPILOT_PROVIDER_BASE_URL }}
+          COPILOT_PROVIDER_API_KEY: ${{ secrets.COPILOT_PROVIDER_API_KEY }}
+          COPILOT_MODEL: ${{ secrets.COPILOT_MODEL }}          
         run: |
           copilot -p "$(cat generation_prompt.txt)" \
             --allow-all-tools \
             --allow-all-paths \
-            --no-ask-user \
-            --agent test-generator | tee generated_changes.md
+            --no-ask-user | tee generated_changes.md
+            # --agent test-generator | tee generated_changes.md
           git status
       - name: Upload generation output artifact
         if: always()
