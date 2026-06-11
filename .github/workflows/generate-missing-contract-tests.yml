@@ -104,7 +104,8 @@ jobs:
         run: |
           copilot -p "$(cat generation_prompt.txt)" \
             --allow-all \
-            --no-ask-user
+            --no-ask-user \
+            --agent Contract-Test-Generator
           rm generation_prompt.txt
 
       - name: Upload generation output artifact
