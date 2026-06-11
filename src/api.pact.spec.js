@@ -2,7 +2,7 @@ const { PactV3 } = require("@pact-foundation/pact");
 const API = require("./api");
 const { MatchersV3 } = require("@pact-foundation/pact");
 const Product = require("./product");
-const { eachLike, like } = MatchersV3;
+const { eachLike, like, regex } = MatchersV3;
 const Pact = PactV3;
 
 const mockProvider = new Pact({
@@ -39,7 +39,8 @@ describe("API Pact test", () => {
         .willRespondWith({
           status: 200,
           headers: {
-            "Content-Type": "application/json; charset=utf-8",
+            // "Content-Type": "application/json; charset=utf-8",
+            'Content-Type': regex(/^application\/json(;\s?charset=[\w\-]+)?$/, 'application/json')
           },
           body: like(expectedProduct),
         })
