@@ -1,7 +1,6 @@
 ---
 name: Contract-Test-Generator
 description: Generates missing contract tests from identified coverage gaps.
-tools: ["*"]
 mcp-servers:
   custom-mcp:
     type: 'local'

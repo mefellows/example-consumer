@@ -103,8 +103,7 @@ jobs:
           COPILOT_MODEL: ${{ secrets.COPILOT_MODEL }}          
         run: |
           copilot -p "$(cat generation_prompt.txt)" \
-            --allow-all-tools \
-            --allow-all-paths \
+            --allow-all \
             --no-ask-user \
             --agent test-generator
           rm generation_prompt.txt
