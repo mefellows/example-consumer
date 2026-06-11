@@ -77,19 +77,34 @@ jobs:
             > latest_review.md
 
           {
+            echo "You are the Contract Test Generator for this repository."
+            echo "Generate only the missing contract tests identified in the PR review coverage gaps."
+            echo ""
+            echo "Definition of done:"
+            echo "- Missing scenarios identified in the provided review are covered by tests."
+            echo "- Existing tests remain compatible."
+            echo "- Changes are ready for commit by the workflow."
+            echo ""
             echo "You are updating this PR branch in response to a checked checkbox asking to generate missing contract tests."
             echo ""
             echo "PR URL: $(gh pr view "${PR_NUMBER}" --json url --jq '.url')"
             echo ""
             echo "Use the coverage gaps in the following review markdown to implement missing contract tests."
             echo "Only add or edit tests required to close the uncovered scenarios."
-            echo "Preserve existing test style and naming conventions."
-            echo "Edit files directly in the local checked-out workspace. Do not use GitHub API/MCP repo reads or writes for source files."
-            echo "Use the local filesystem write path, not JSON output, to make the changes."
             echo ""
             echo "Review markdown:"
             echo ""
             cat latest_review.md
+            echo ""
+            echo "Rules:"
+            echo "- Make minimal, targeted edits only to test files and related fixtures."
+            echo "- Preserve existing project conventions, naming, and style."
+            echo "- Do not modify unrelated production code unless absolutely required to make tests compile and run."
+            echo "- Do not post comments, open PRs, or write summaries intended for humans."
+            echo "- Do not include markdown output unless explicitly asked by the caller."
+            echo "- Edit files directly in the local checked-out workspace using the provided shell and write tools."
+            echo "- Do not use GitHub API, MCP repo-content tools, or any external repository read/write path."
+            echo "- If a file needs to change, write it locally in place rather than returning a plan or summary."
           } > generation_prompt.txt
           cat generation_prompt.txt
           rm latest_review.md
@@ -103,9 +118,9 @@ jobs:
           COPILOT_MODEL: ${{ secrets.COPILOT_MODEL }}          
         run: |
           copilot -p "$(cat generation_prompt.txt)" \
-            --allow-all \
-            --no-ask-user \
-            --agent Contract-Test-Generator
+            --allow-all-tools \
+            --allow-all-paths \
+            --no-ask-user
           rm generation_prompt.txt
 
       - name: Upload generation output artifact
