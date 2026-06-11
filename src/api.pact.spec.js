@@ -118,4 +118,52 @@ describe("API Pact test", () => {
       });
     });
   });
+
+  describe("deleting a product", () => {
+    test("deletes an existing product", async () => {
+      return mockProvider
+        .given("a product with ID 10 exists")
+        .uponReceiving("a request to delete a product")
+        .withRequest({
+          method: "DELETE",
+          path: "/product/10",
+          headers: {
+            Authorization: like("Bearer 2019-01-14T11:34:18.045Z"),
+          },
+        })
+        .willRespondWith({
+          status: 204,
+        })
+        .executeTest(async (mockserver) => {
+          const api = new API(mockserver.url);
+
+          await expect(api.deleteProduct("10")).resolves.toMatchObject({
+            status: 204,
+          });
+        });
+    });
+
+    test("fails to delete a missing product", async () => {
+      return mockProvider
+        .given("a product with ID 11 does not exist")
+        .uponReceiving("a request to delete a product")
+        .withRequest({
+          method: "DELETE",
+          path: "/product/11",
+          headers: {
+            Authorization: like("Bearer 2019-01-14T11:34:18.045Z"),
+          },
+        })
+        .willRespondWith({
+          status: 404,
+        })
+        .executeTest(async (mockserver) => {
+          const api = new API(mockserver.url);
+
+          await expect(api.deleteProduct("11")).rejects.toThrow(
+            "Request failed with status code 404"
+          );
+        });
+    });
+  });
 });
