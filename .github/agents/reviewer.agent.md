@@ -1,9 +1,7 @@
 ---
 name: PR-Reviewer
 description: Expert code reviewer specializing in security and performance.
-tools:
-  - github/*
-  - smartbear-local/contract-testing_review_pact_tests
+tools: ["*"]
 mcp-servers:
   custom-mcp:
     type: 'local'
