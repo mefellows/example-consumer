@@ -1,5 +1,7 @@
 ---
 name: Contract-Test-Generator
+target: github-copilot
+tools: ["read", "edit", "execute", "agent", "todo", "web", "search", "github/*", "smartbear-local/*", "copilot/*"]
 description: Generates missing contract tests from identified coverage gaps.
 mcp-servers:
   custom-mcp:
