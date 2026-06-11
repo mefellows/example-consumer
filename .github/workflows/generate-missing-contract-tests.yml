@@ -92,6 +92,7 @@ jobs:
             cat latest_review.md
           } > generation_prompt.txt
           cat generation_prompt.txt
+          rm latest_review.md
 
       - name: Generate missing tests with custom agent
         env:
@@ -105,7 +106,9 @@ jobs:
             --allow-all-tools \
             --allow-all-paths \
             --no-ask-user |
-            --agent test-generator | tee generated_changes.md
+            --agent test-generator
+          rm generation_prompt.txt
+
       - name: Upload generation output artifact
         if: always()
         uses: actions/upload-artifact@v4
