@@ -6,12 +6,14 @@ tools:
   - execute
   - write
   - github/*
+  - smartbear-local/contract-testing_generate_pact_tests
+  - shell
   - edit/createFile
   - create
   - edit
   - view
   - apply_patch
-  - custom-mcp/*
+  - custom-mcp/*  
 mcp-servers:
   custom-mcp:
     type: 'local'
