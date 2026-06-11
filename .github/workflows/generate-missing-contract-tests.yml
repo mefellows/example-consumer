@@ -105,7 +105,7 @@ jobs:
           copilot -p "$(cat generation_prompt.txt)" \
             --allow-all-tools \
             --allow-all-paths \
-            --no-ask-user |
+            --no-ask-user \
             --agent test-generator
           rm generation_prompt.txt
 
